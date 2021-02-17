@@ -1,2 +1,9 @@
 *.class
 *.log
+target/
+/project/target/
+/project/project
+/.idea/
+/.bsp/
+/modules/common/target/
+/project/.bsp/
