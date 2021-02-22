@@ -109,7 +109,7 @@ object RDS extends AWSUtils {
   def findClusters(filters: Filter*)(implicit cs: ContextShift[IO]): IO[List[DBCluster]] = {
     IOU
       .toIO(client.describeDBClusters(DescribeDbClustersRequest.builder.filters(filters.asJavaCollection).maxRecords(100).build()))
-      .map(v => nullsafeFromList(v.dbClusters()))
+      .map(v => fromJList(v.dbClusters()))
   }
 
   def findCluster(dbClusterName: String)(implicit cs: ContextShift[IO]): IO[scala.Option[DBCluster]] = {

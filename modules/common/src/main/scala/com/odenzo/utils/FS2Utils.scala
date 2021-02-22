@@ -17,7 +17,7 @@ case class RetryableError(msg: String) extends Throwable(msg) {
 /** Some FS2 Utils, retry utilities and  Reactive Stream bridges. All are lazy so should rationalize */
 object FS2Utils {
 
-  /** Consumes the whole stream as a list, for paginators. This is lazy. */
+  /** Consumes the whole stream as a list, for paginator. This is lazy. */
   def toList[T, U](publisher: => Publisher[T])(implicit cs: ContextShift[IO]): IO[List[T]] = publisher.toStream[IO].compile.toList
 
   /** Takes a tunk and suspends running it. Usually we are already in an IO but.... */
@@ -46,14 +46,12 @@ object FS2Utils {
     */
   def uniformRetry[A](interval: FiniteDuration, maxAttempts: Int)(fn: => IO[A])(implicit cs: ContextShift[IO], timer: Timer[IO]): IO[A] = {
     def retryIf(e: Throwable) = e.isInstanceOf[RetryableError]
-
     Stream.retry(fn, interval, identity, maxAttempts, retryIf).compile.lastOrError
   }
 
   def backoffRetry[A](delay: FiniteDuration, maxAttempts: Int)(fn: => IO[A])(implicit cs: ContextShift[IO], timer: Timer[IO]): IO[A] = {
     val backoffFunc: FiniteDuration => FiniteDuration = (d: FiniteDuration) => d * 2
     def retryIf(e: Throwable)                         = e.isInstanceOf[RetryableError]
-
     Stream.retry(fn, delay, backoffFunc, maxAttempts, retryIf).compile.lastOrError
   }
 

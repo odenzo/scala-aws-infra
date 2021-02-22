@@ -67,7 +67,7 @@ object SecurityGroups extends AwsErrorUtils with AWSUtils {
 
   def findSecurityGroupById(groupId: String)(implicit cs: ContextShift[IO]): IO[Option[SecurityGroup]] = {
     completableFutureToIO(EC2.client.describeSecurityGroups(DescribeSecurityGroupsRequest.builder.groupIds(groupId).build()))
-      .map(r => nullsafeFromList(r.securityGroups))
+      .map(r => fromJList(r.securityGroups))
       .flatMap(IOU.optionOne(s"SG ID $groupId"))
   }
 

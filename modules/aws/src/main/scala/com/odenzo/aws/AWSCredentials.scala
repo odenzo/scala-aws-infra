@@ -6,9 +6,11 @@ import io.circe.generic.extras.Configuration
 import io.circe.generic.extras.semiauto.deriveConfiguredCodec
 import software.amazon.awssdk.auth.credentials._
 
+import scala.sys.SystemProperties
+
 case class AWSCredentials(keyId: String, accessKey: Secret, region: String = "us-east-1", accountId: String) {
 
-  def setSystemProperties() = {
+  def setSystemProperties(): SystemProperties = {
     val props = List(
       "AWS_ACCESS_KEY_ID"     -> keyId,
       "AWS_SECRET_ACCESS_KEY" -> accessKey.secret,
@@ -27,8 +29,7 @@ object AWSDefault {
     creds
   }
 
-  val keyId     = "AKIA4ZMCBAJSUNQE3OLP"
-  val accountId = "879130378853"
+
 }
 
 import com.odenzo.utils.Secret
@@ -38,11 +39,11 @@ import software.amazon.awssdk.services.ec2.model.CreateKeyPairResponse
 case class AwsPEM(id: String, name: String, material: Secret, fingerPrint: String)
 
 object AwsPEM {
-  def from(created: CreateKeyPairResponse) = {
+  def from(created: CreateKeyPairResponse): AwsPEM = {
     AwsPEM(created.keyPairId, created.keyName, Secret(created.keyMaterial), created.keyFingerprint)
   }
 
-  def fake(name: String) = {
+  def fake(name: String): AwsPEM = {
     AwsPEM("fake-id-exists-already", name, Secret.generate, "hackers-printss")
   }
 
@@ -50,5 +51,4 @@ object AwsPEM {
   implicit val codec: Codec.AsObject[AwsPEM] = deriveConfiguredCodec[AwsPEM]
 }
 
-/** Just used for Cassandra nows */
 case class ServiceSpecificCredentials(id: String, name: String, material: Secret, serviceName: String)

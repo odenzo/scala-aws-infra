@@ -3,11 +3,13 @@ import cats._
 import cats.data._
 import cats.syntax.all._
 
+import scala.util.matching.Regex
+
 /** Hack class for x.y.z style semantic versioning */
 case class SemanticVersion(mega: Int, major: Int, minor: Int) {}
 
 object SemanticVersion {
-  val pattern = """(\d+).(\d+).(\d+)""".r
+  val pattern: Regex = """(\d+).(\d+).(\d+)""".r
 
   implicit val ordering: Ordering[SemanticVersion] = Ordering.by(unapply)
 

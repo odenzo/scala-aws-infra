@@ -52,7 +52,7 @@ object ACM extends AWSUtils {
   def describeCertificates(filters: Filters)(implicit cs: ContextShift[IO]): IO[fs2.Stream[IO, CertificateSummary]] = {
     for {
       stream <- FS2Utils.toStream(client.listCertificatesPaginator(ListCertificatesRequest.builder.includes(filters).build()))
-      emitted = stream.map(rs => nullsafeFromList(rs.certificateSummaryList)).flatMap(fs2.Stream.emits)
+      emitted = stream.map(rs => fromJList(rs.certificateSummaryList)).flatMap(fs2.Stream.emits)
     } yield emitted
   }
 

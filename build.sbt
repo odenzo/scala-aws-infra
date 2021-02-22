@@ -51,9 +51,9 @@ lazy val aws = project
 resolvers += "Confluent Maven Repository" at "https://packages.confluent.io/maven/"
 
 
-val awsSdk                   = "2.15.72"
-val catsEffectV              = "2.3.1"
-val catsV                    = "2.3.1"
+val awsSdk                   = "2.16.0"
+val catsEffectV              = "2.3.2"
+val catsV                    = "2.4.2"
 val chimneyVersion           = "0.6.1"
 val circeConfigV             = "0.8.0"
 val circeVersion             = "0.13.0"
@@ -64,10 +64,10 @@ val monocleV                 = "2.1.0"
 val oslibV                   = "0.7.2"
 val pprintV                  = "0.6.1"
 val pureSchedularV           = "0.4.3"
-val scalaCheckV              = "1.15.2"
+val scalaCheckV              = "1.15.3"
 val scalaMockV               = "5.0.0"
 val scalaTestV               = "3.2.3"
-val scribeV                  = "3.3.1"
+val scribeV                  = "3.3.3"
 val declineV                 = "1.3.0"
 
 val libs = {
@@ -78,31 +78,6 @@ val libs = {
 }
 
 val libs_test = Seq("org.scalatest" %% "scalatest" % scalaTestV % Test, "org.scalacheck" %% "scalacheck" % scalaCheckV % Test)
-
-val lib_aws = Seq(
-  //"software.amazon.awssdk" % "cassandra"   % awsSdk,
-  "software.amazon.awssdk" % "acm"            % awsSdk,
-  "software.amazon.awssdk" % "apigatewayv2"   % awsSdk,
-  "software.amazon.awssdk" % "cloudformation" % awsSdk,
-  "software.amazon.awssdk" % "ec2"            % awsSdk,
-  "software.amazon.awssdk" % "ecr"            % awsSdk,
-  "software.amazon.awssdk" % "elasticsearch"  % awsSdk,
-  "software.amazon.awssdk" % "eks"            % awsSdk,
-  "software.amazon.awssdk" % "elasticache"    % awsSdk,
-  "software.amazon.awssdk" % "iam"            % awsSdk,
-  "software.amazon.awssdk" % "kafka"          % awsSdk,
-  "software.amazon.awssdk" % "kms"            % awsSdk,
-  "software.amazon.awssdk" % "lambda"         % awsSdk,
-  "software.amazon.awssdk" % "rds"            % awsSdk,
-  "software.amazon.awssdk" % "rdsdata"        % awsSdk,
-  "software.amazon.awssdk" % "route53"        % awsSdk,
-  "software.amazon.awssdk" % "route53domains" % awsSdk,
-  "software.amazon.awssdk" % "s3"             % awsSdk,
-  "software.amazon.awssdk" % "secretsmanager" % awsSdk,
-  "software.amazon.awssdk" % "sns"            % awsSdk,
-  "software.amazon.awssdk" % "ssm"            % awsSdk,
-  "software.amazon.awssdk" % "sts"            % awsSdk
-)
 
 val lib_fs2 = Seq(
   "co.fs2" %% "fs2-core"             % fs2V,
@@ -132,4 +107,33 @@ val lib_cats   = Seq("org.typelevel" %% "cats-core" % catsV, "org.typelevel" %% 
 
 val lib_monocle = Seq("com.github.julien-truffaut" %% "monocle-core" % monocleV, "com.github.julien-truffaut" %% "monocle-macro" % monocleV)
 
-val lib_scribe = Seq("com.outr" %% "scribe" % scribeV, "com.outr" %% "scribe-slf4j" % scribeV)
+val lib_scribe = Seq(//
+  // "com.outr" %% "scribe" % scribeV,
+  "com.outr" %% "scribe-slf4j" % scribeV
+)
+
+
+val lib_aws = Seq(
+  //"software.amazon.awssdk" % "cassandra"   % awsSdk,
+  "software.amazon.awssdk" % "acm"            % awsSdk,
+  "software.amazon.awssdk" % "apigatewayv2"   % awsSdk,
+  "software.amazon.awssdk" % "cloudformation" % awsSdk,
+  "software.amazon.awssdk" % "ec2"            % awsSdk,
+  "software.amazon.awssdk" % "ecr"            % awsSdk,
+  "software.amazon.awssdk" % "elasticsearch"  % awsSdk,
+  "software.amazon.awssdk" % "eks"            % awsSdk,
+  "software.amazon.awssdk" % "elasticache"    % awsSdk,
+  "software.amazon.awssdk" % "iam"            % awsSdk,
+  "software.amazon.awssdk" % "kafka"          % awsSdk,
+  "software.amazon.awssdk" % "kms"            % awsSdk,
+  "software.amazon.awssdk" % "lambda"         % awsSdk,
+  "software.amazon.awssdk" % "rds"            % awsSdk,
+  "software.amazon.awssdk" % "rdsdata"        % awsSdk,
+  "software.amazon.awssdk" % "route53"        % awsSdk,
+  "software.amazon.awssdk" % "route53domains" % awsSdk,
+  "software.amazon.awssdk" % "s3"             % awsSdk,
+  "software.amazon.awssdk" % "secretsmanager" % awsSdk,
+  "software.amazon.awssdk" % "sns"            % awsSdk,
+  "software.amazon.awssdk" % "ssm"            % awsSdk,
+  "software.amazon.awssdk" % "sts"            % awsSdk
+)

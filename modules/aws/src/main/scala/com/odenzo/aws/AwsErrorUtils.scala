@@ -8,7 +8,7 @@ import cats.syntax.all._
 import com.odenzo.utils.OError
 import com.odenzo.utils.OPrint.oprint
 import software.amazon.awssdk.awscore.AwsResponse
-import software.amazon.awssdk.awscore.exception.AwsServiceException
+import software.amazon.awssdk.awscore.exception.{AwsErrorDetails, AwsServiceException}
 import software.amazon.awssdk.services.ec2.model.Ec2Exception
 
 import scala.reflect.ClassTag
@@ -16,13 +16,31 @@ import scala.reflect.ClassTag
 /** Some helpers to deal with AWS Errors in F when time to do it correctly. But not much consistency */
 trait AwsErrorUtils {
 
-  def resultSuccessful[T <: AwsResponse](msg: String = "Generic AWS Error")(rs: T) = {
-    if (rs.sdkHttpResponse().isSuccessful) IO.pure(rs)
-    else IO.raiseError(OError(msg))
+  def narrowException[T<:Throwable:ClassTag](e:Throwable):Option[T]=
+    e match {
+      case e:T => e.some
+      case _   => Option.empty[T]
+    }
+
+  /** Gets the nested exception returning None if not cause or not matched against T
+    * Example:    nestedException[Ec2Exception](e)*/
+  def narrowNestedException[T <: Throwable: ClassTag](e: Throwable): Option[T] = {
+    Option(e.getCause).flatMap(narrowException)
   }
 
+
+  def resultSuccessful[T <: AwsResponse](msg: String = "Generic AWS Error")(rs: T): SyncIO[T]    = {
+    if (rs.sdkHttpResponse().isSuccessful) SyncIO.pure(rs)
+    else SyncIO.raiseError(OError(msg))
+  }
+
+
+  def checkError2[F[_]](x:Int)(implicit ae:ApplicativeError[F,IllegalArgumentException]): F[Int] =
+    if (x<0) ae.raiseError(new IllegalArgumentException("Foo")) else ae.pure(x)
+
+
   /** For redeemeding AWS calls that have a  *nested* exception of given type, typically NotFoundException for the module */
-  def reedemToOption[A, B: ClassTag](typ: B)(ioMaybe: IO[A])(implicit ct: ClassTag[B]): IO[Option[A]] = {
+  def reedeemToOption[A, B: ClassTag](typ: B)(ioMaybe: IO[A])(implicit ct: ClassTag[B]): IO[Option[A]] = {
     ioMaybe.redeemWith(
       ex => {
         scribe.warn(s"Nested Cause ${ex.getCause}")
@@ -34,6 +52,8 @@ trait AwsErrorUtils {
     )
   }
 
+  /** If the nested cause is of type T then apply partial function fn.
+    * @return None if no nested exception or doesn't match T or fn not covered */
   def nestedFn[A, T <: Throwable: ClassTag](ex: Throwable)(fn: PartialFunction[T, A]): Option[A] = {
     ex.getCause match {
       case t: T => fn.lift(t)
@@ -41,17 +61,14 @@ trait AwsErrorUtils {
     }
   }
 
-  /** Anyway, this is all I need for now.
-    * Often for delete operations, we want to delete and ignore if not found.
-    * Basically ignore one error code.
-    * Usage: IO(doSomething)
+  /**
+    * This is a 'redeem' based on AWSServiceException Error Details Code.
+    * Rather than a function if takes error code to A table. Assumes uniqueness and returns first match
+    * e.g. narrowNestedException[AwsServiceException](e).flatMap(handleAwsCodes(("203","AThing"),("204","AnotherThing"))
     */
-  def handleAwsCodes[A](codeToRes: (String, A)*)(e: Throwable): Option[A] = {
-    e match {
-      case err: AwsServiceException => codeToRes.toMap.get(err.awsErrorDetails.errorCode)
-      case _                        => None
-    }
-  }
+  def handleAwsCodes[A](codeToRes: (String, A)*)(e: AwsServiceException): Option[A] =
+     codeToRes.find(_._1 == e.awsErrorDetails.errorCode).map(_._2)
+
 
   /** Checks the nested throwable is of type T and fn is true on T.
     * If so, then returns Option.empty else rethrows
@@ -74,29 +91,22 @@ trait AwsErrorUtils {
 
   }
 
-  /** Gets the nested exception returning None if not cause or not matched against T */
-  def nestedException[T <: Throwable: ClassTag](e: Throwable) = {
-    Option(e.getCause).flatMap {
-      case nested: T => nested.some
-      case _         => Option.empty
-    }
-  }
+
+
 
   /** If this is an Ec2Exception return the AwsErrorDetails or none */
-  def ec2ErrorDetails(e: Throwable) = {
-    nestedException[Ec2Exception](e).map(_.awsErrorDetails())
+  def awsErrorDetails(e: Throwable): Option[AwsErrorDetails] = {
+    narrowNestedException[AwsServiceException](e).map(_.awsErrorDetails())
   }
 
-  /** Partial function generator to use for recover */
-  def ec2ErrorMatch(code: String)(e: Throwable) = {
-    ec2ErrorDetails(e).flatMap { awsInfo =>
-      if (awsInfo.errorCode.equals(code)) {
-        scribe.debug(s"Matched EC2 $code to $awsInfo")
-        awsInfo.some
-      } else {
-        scribe.info(s"Unmatched EC2 Exception $awsInfo")
-        None
-      }
+  /** Partial function generator to use for recover.
+    * Note this is the AWSErrorDetails error code, not the SdkException HTTP status code.
+    * If its an AWSServiceException with the given code return details.
+    * Else Option.empty*/
+  def awsSdkErrorCode(code: String)(e: Throwable): Option[AwsErrorDetails] = {
+    awsErrorDetails(e).flatMap { awsInfo =>
+      if (awsInfo.errorCode.equals(code))  awsInfo.some
+      else None
     }
   }
 
@@ -105,23 +115,17 @@ trait AwsErrorUtils {
     * Add example code. recover gone away?
     */
   def recoverEc2ErrorCode[T](code: String, to: T): PartialFunction[Throwable, T] = {
-    val fn: Throwable => Option[T] = ec2ErrorMatch(code)(_).map(_ => to)
+    def fn(e:Throwable) = awsErrorDetails(e)
+      .flatMap(details => if (details.errorCode == code) to.some else None)
+
     Function.unlift(fn)
+
   }
 
-  /**  Revisit this, to try and catch some more wanky AWS Errors.
-    * Also experiment with merging the stack traces and the Java CompletionException has nothing worthwhile
-    *  catchNestedAwsError(IOU.toIO(client.call)) {
-    *    case  ex: S3Exception => ...
-    *  }
-    * @param io
-    * @param catcher
-    * @tparam A
-    * @tparam T
-    * @return
-    */
-  def catchNestedAwsError[A, T <: Throwable: ClassTag](io: IO[A])(catcher: PartialFunction[Throwable, IO[A]]) = {
-    io.handleErrorWith { err =>
+
+  def catchNestedAwsError[F[_],A, T <: Throwable: ClassTag](io: F[A])(catcher: PartialFunction[Throwable, IO[A]])
+                                                           (implicit  ae: ApplicativeError[F,Throwable])= {
+    F.handleErrorWith { err =>
       val handled: Option[IO[A]] = if (err.isInstanceOf[java.util.concurrent.CompletionException]) {
         catcher.lift(err.getCause)
       } else Option.empty[IO[A]]
@@ -132,12 +136,7 @@ trait AwsErrorUtils {
   /**
     * IO.delay(fn).handleErrorWith(awsNestedErrorHandler { case foo:SomeEx if bool => IO.raiseError or IO.pure(fo)
     * Like a partial redeem
-    * @param err
-    * @param catcher
-    * @tparam A
-    * @tparam T
-    * @return
-    */
+     */
   def awsNestedErrorHandler[A, T <: Throwable: ClassTag](catcher: PartialFunction[T, IO[A]])(err: T) = {
 
     val handled: Option[IO[A]] = {
@@ -151,4 +150,6 @@ trait AwsErrorUtils {
 
 object AwsErrorUtils extends AwsErrorUtils
 
+
+/** My AWS Domain Error Class */
 case class OAWSErr(msg: String) extends Throwable

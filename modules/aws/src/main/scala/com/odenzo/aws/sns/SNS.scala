@@ -12,9 +12,10 @@ import scala.jdk.CollectionConverters._
 /** AWS Simple Notification Service -- pubsub queue */
 object SNS extends AWSUtils {
 
-  lazy val client                       = SnsAsyncClient.create()
+  private lazy val client                       = SnsAsyncClient.create()
+
   //noinspection DuplicatedCode
-  val toSNSTag: (String, String) => Tag = (k: String, v: String) => Tag.builder().key(k).value(v).build()
+  val toSNSTag: (String, String) => Tag = (k: String, v: String) => Tag.builder.key(k).value(v).build()
 
   /** Gets existing topic or creates new one, returns the ARN either way */
   def createTopicIfNotExists(name: String, displayName: Option[String], tags: OTags)(implicit cs: ContextShift[IO]): IO[String] = {
@@ -52,7 +53,7 @@ object SNS extends AWSUtils {
     )
   }
 
-  def deleteTopicByArn(arn: String)(implicit cs: ContextShift[IO]) = {
+  def deleteTopicByArn(arn: String)(implicit cs: ContextShift[IO]): IO[DeleteTopicResponse] = {
     IOU.toIO(client.deleteTopic(DeleteTopicRequest.builder().topicArn(arn).build))
   }
 
@@ -74,13 +75,13 @@ object SNS extends AWSUtils {
     FS2Utils.toStream(client.listTopicsPaginator().topics())
 
   /** Finds topic by applying filter, typically filter making another call */
-  def findTopics[A](fn: Topic => IO[Option[A]])(implicit cs: ContextShift[IO]) = {
+  def findTopics[A](fn: Topic => IO[Option[A]])(implicit cs: ContextShift[IO]): IO[List[A]] = {
     // parEvalMapFilter
     listTopics().flatMap { str => str.evalMapFilter(fn).compile.toList }
   }
 
   /** Finds topic by applying filter, typically filter making another call */
-  def findFirstTopic[A](fn: Topic => IO[Option[A]])(implicit cs: ContextShift[IO]) = {
+  def findFirstTopic[A](fn: Topic => IO[Option[A]])(implicit cs: ContextShift[IO]): IO[Option[A]] = {
     listTopics().flatMap { str => str.evalMapFilter(fn).head.compile.last }
   }
 
@@ -91,7 +92,7 @@ object SNS extends AWSUtils {
     matches >>= IOU.optionOne(s"Topic Arn Suffix $name")
   }
 
-  /** Topic only has arn attribe  but the last but is the "Name" */
+  /** Topic only has arn attribe  but the last bit is the "Name" */
   def listTopicArns()(implicit cs: ContextShift[IO]): IO[List[Topic]] = listTopics().flatMap(_.compile.toList)
 
 }

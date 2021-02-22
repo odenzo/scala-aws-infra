@@ -5,6 +5,7 @@ import pprint.{PPrinter, Tree}
 
 object OPrint {
 
+  /** Customized version of pprint with config */
   def oprint[A](a: A): String = pp.apply(a).render
 
   def secretHandler(a: Any): Option[Tree] = {

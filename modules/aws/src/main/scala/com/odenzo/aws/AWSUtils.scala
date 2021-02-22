@@ -13,14 +13,15 @@ import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters.CollectionHasAsScala
 
-// TODO: Move over IOU utils to here to prepare seperating out
-// TODO: Cleanup duplicate functionallity waiters
+
 trait AWSUtils {
+
+  import scala.jdk.FutureConverters._
 
   def scribeInfo(s: String): Unit = scribe.info(s)
 
   def completableFutureToIO[A](fn: => CompletableFuture[A])(implicit cs: ContextShift[IO]): IO[A] = {
-    import scala.jdk.FutureConverters._
+
     val ff: IO[Future[A]] = IO.delay(fn.asScala)
     IO.fromFuture(ff) // Does IO.async under the hood.
   }
@@ -43,8 +44,8 @@ trait AWSUtils {
     IO.fromOption(o)(OAWSErr(s"Option Value Required: $msg"))
   }
 
-  /** Convert a possible null Java list to a Scala list. */
-  def nullsafeFromList[T](list: java.util.List[T]): List[T] = {
+  /** Convert a possible null Java list to a Scala list, possibly empty */
+  def fromJList[T](list: java.util.List[T]): List[T] = {
     if (list == null) scala.List.empty[T]
     else list.asScala.toList
   }

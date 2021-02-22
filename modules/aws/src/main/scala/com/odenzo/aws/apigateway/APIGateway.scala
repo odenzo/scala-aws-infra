@@ -47,7 +47,7 @@ object APIGateway extends AWSUtils with AwsErrorUtils {
           .apiId(apiId)
           .connectionType(ConnectionType.INTERNET)
           .integrationType(IntegrationType.AWS_PROXY)
-          .integrationMethod("POST") // ? thats whats reporting for existing PROD, POST to Lambda I guess
+          .integrationMethod("POST")
           .integrationUri(lambdaFnArn)
           .payloadFormatVersion("1.0")
           .timeoutInMillis(29000)
@@ -92,11 +92,10 @@ object APIGateway extends AWSUtils with AwsErrorUtils {
   def getStages(apiId: String)(implicit cs: ContextShift[IO]): IO[List[Stage]] = {
     //client.getApiMapping(GetApiMappingRequest.builder().apiMappingId("x").domainName("y"))
     completableFutureToIO(client.getStages(GetStagesRequest.builder().apiId(apiId).maxResults("100").build()))
-      .map(r => nullsafeFromList(r.items()))
+      .map(r => fromJList(r.items()))
   }
 
   def getIntegrationResponses(apiId: String, integrationId: String)(implicit cs: ContextShift[IO]): IO[List[IntegrationResponse]] = {
-    //client.getApiMapping(GetApiMappingRequest.builder().apiMappingId("x").domainName("y"))
     completableFutureToIO(
       client.getIntegrationResponses(
         GetIntegrationResponsesRequest
@@ -113,9 +112,8 @@ object APIGateway extends AWSUtils with AwsErrorUtils {
   /** No Scrolling of results, maxes at 100 */
   def getDeployments(apiId: String)(implicit cs: ContextShift[IO]): IO[List[Deployment]] = {
     completableFutureToIO {
-      // max is string, go figure...
       client.getDeployments(GetDeploymentsRequest.builder().apiId(apiId).maxResults("100").build())
-    }.map(r => nullsafeFromList(r.items))
+    }.map(r => fromJList(r.items))
   }
   def deleteApiGatewaysByName(name: String)(implicit cs: ContextShift[IO]): IO[Unit] = {
     for {

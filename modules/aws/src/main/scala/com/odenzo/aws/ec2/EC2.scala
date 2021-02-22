@@ -18,7 +18,9 @@ object EC2 {
 
   import scala.jdk.CollectionConverters._
 
-  val toEC2Tag: (String, String) => Tag = (k: String, v: String) => Tag.builder().key(k).value(v).build()
+  lazy val client: Ec2AsyncClient = Ec2AsyncClient.create()
+
+  val toEC2Tag: (String, String) => Tag = (k: String, v: String) => Tag.builder.key(k).value(v).build()
 
   def filter(key: String, values: Seq[String]): Filter = Filter.builder().name(key).values(values.asJavaCollection).build()
   def filter(key: String, value: String): Filter       = Filter.builder().name(key).values(value).build()
@@ -30,7 +32,6 @@ object EC2 {
     TagSpecification.builder().resourceType(resourceType).tags(tags.via(toEC2Tag)).build()
   }
 
-  lazy val client: Ec2AsyncClient = Ec2AsyncClient.create()
 
   /** This may as well return IO[Unit] as nothing of interest in the response */
   def tagResources(resourceIds: List[String], tags: OTags)(implicit cs: ContextShift[IO]): IO[CreateTagsResponse] = {
@@ -44,10 +45,11 @@ object EC2 {
     )
   }
 
-  def tagResource(resourceId: String, tags: OTags)(implicit cs: ContextShift[IO]): IO[CreateTagsResponse] = {
-    IO(scribe.debug(s"Tagging Resource $resourceId w/ $tags")) *> tagResources(List(resourceId), tags)
+  def tagResources(rq:CreateTagsRequest)(implicit cs:ContextShift[IO]): IO[CreateTagsResponse] = IOU.toIO(client.createTags(rq))
 
-  }
+  def tagResource(resourceId: String, tags: OTags)(implicit cs: ContextShift[IO]): IO[CreateTagsResponse] =
+    tagResources(List(resourceId), tags)
+
 
   def createKeyPair(keyname: String, tags: OTags)(implicit cs: ContextShift[IO]): IO[CreateKeyPairResponse] = {
     IOU
@@ -100,6 +102,8 @@ object EC2 {
       .keyName(keyName)
       .minCount(1)
       .maxCount(1)
+      //.additionalInfo()
+      .ebsOptimized(false)
       //  .hibernationOptions(HibernationOptionsRequest.builder.configured(true).build())
       .instanceInitiatedShutdownBehavior(ShutdownBehavior.STOP)
       .monitoring(RunInstancesMonitoringEnabled.builder.enabled(true).build())
@@ -110,9 +114,12 @@ object EC2 {
       .build()
 
     scribe.info(s"EC2 RunInstance REquest: ${oprint(rq)}")
-    IOU.toIO(client.runInstances(rq)).map(_.instances.asScala.toList) >>= IOU.exactlyOne(s"EC2 Instance")
+    runInstances(rq).map(_.instances.asScala.toList) >>= IOU.exactlyOne(s"EC2 Instance")
   }
 
+  def runInstances(rq:RunInstancesRequest)(implicit cs:ContextShift[IO]): IO[RunInstancesResponse] = {
+    IOU.toIO(client.runInstances(rq))
+  }
   def describeInstanceStatus(id: String)(implicit cs: ContextShift[IO]): IO[InstanceStatus] = {
     IOU
       .toIO(

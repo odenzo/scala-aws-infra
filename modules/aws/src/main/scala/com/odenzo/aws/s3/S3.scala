@@ -128,7 +128,7 @@ object S3 extends AWSUtils with AwsErrorUtils {
       .toIO(client.listBuckets())
       .flatMap { rs =>
         fs2.Stream
-          .emits(AWSUtils.nullsafeFromList(rs.buckets))
+          .emits(AWSUtils.fromJList(rs.buckets))
           .covary[IO]
           .debug(oprint(_), logger = scribeInfo)
           .evalMap(b => getBucketTags(b.name()).tupleLeft(b))
@@ -156,7 +156,7 @@ object S3 extends AWSUtils with AwsErrorUtils {
     // This  error if no tagSet, no consistency at all...sigh. NoSuchTagSet nested err
     IOU
       .toIO(client.getBucketTagging(GetBucketTaggingRequest.builder().bucket(bucketName).build()))
-      .map(rs => if (rs.hasTagSet) nullsafeFromList(rs.tagSet) else List.empty)
+      .map(rs => if (rs.hasTagSet) fromJList(rs.tagSet) else List.empty)
       .handleErrorWith(awsNestedErrorHandler {
         case e: S3Exception if e.awsErrorDetails.errorCode == "NoSuchTagSet" => IO.pure(List.empty)
       })
@@ -244,7 +244,7 @@ object S3 extends AWSUtils with AwsErrorUtils {
         .debug(s => s"Deleting Content $s", scribeInfo)
         .chunkLimit(100)
         .evalMap(chunk => deleteObjects(bucketName, chunk.toList))
-        .map(rs => nullsafeFromList(rs.errors))
+        .map(rs => fromJList(rs.errors))
         .debug(s => s"$bucketName trouble ${oprint(s)}", scribeInfo)
         .compile
         .fold(List.empty[S3Error])(_ ::: _)
@@ -343,6 +343,6 @@ object S3 extends AWSUtils with AwsErrorUtils {
   def listObjects(bucketName:String, prefix:String)(implicit cs:ContextShift[IO]): IO[fs2.Stream[IO, S3Object]] = {
     FS2Utils.toBurstStream {
       client.listObjectsV2Paginator(ListObjectsV2Request.builder().bucket(bucketName).prefix(prefix).build())
-    }(c => AWSUtils.nullsafeFromList(c.contents()))
+    }(c => AWSUtils.fromJList(c.contents()))
   }
 }

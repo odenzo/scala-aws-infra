@@ -39,7 +39,7 @@ trait ScribeHelpers {
   */
 object ScribeConfig extends ScribeHelpers {
 
-  def smokeClientConfig(): Logger = {
+  def genericConfig(): Logger = {
     // Reset and turn all the com.odenzo.utils.logging levels to Debug for noisy ness
     import scribe.format._
     resetAllToLevel(Level.Debug) // filter in logback

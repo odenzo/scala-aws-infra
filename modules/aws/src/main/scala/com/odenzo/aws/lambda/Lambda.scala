@@ -59,12 +59,12 @@ object Lambda {
   /** Get details of the lastest version of a layer by the layer name. Could be an Option I guess?
     * FIXME: Broken Wants Layer Version ARN. But no use now...
     */
-  @deprecated("Needs Fixing")
+  @deprecated("Needs Fixing", since = "0.0.1")
   def listLayerDetailsByName(name: String)(implicit cs: ContextShift[IO]): IO[Option[GetLayerVersionByArnResponse]] = {
     // Note: This gets the lastest "AWS" version version. I guess the idea of a layer is all functions use the same
 
     FS2Utils
-      .toBurstStream(client.listLayersPaginator())(rs => AWSUtils.nullsafeFromList(rs.layers()))
+      .toBurstStream(client.listLayersPaginator())(rs => AWSUtils.fromJList(rs.layers()))
       .flatMap(
         stream =>
           stream
@@ -78,7 +78,7 @@ object Lambda {
   /** FS2 Stream of versions for a layer */
   def listAllLayerVersions(name: String)(implicit cs: ContextShift[IO]): IO[fs2.Stream[IO, LayerVersionsListItem]] = {
     FS2Utils.toBurstStream(client.listLayerVersionsPaginator(ListLayerVersionsRequest.builder().layerName(name).build()))(
-      rs => AWSUtils.nullsafeFromList(rs.layerVersions)
+      rs => AWSUtils.fromJList(rs.layerVersions)
     )
   }
 
@@ -275,9 +275,7 @@ object Lambda {
             .principal("apigateway.amazonaws.com")
             .action("lambda:InvokeFunction")
             .functionName(fnName)                    // Lots of option, ARN or name
-            //  .qualifier(version)                 // To add to a published version
-            .sourceArn(sourceArn)                    // ARN of the APIGateway, e.g.
-            // "arn:aws:execute-api:us-east-1:879130378853:hw36giybt4/*/*/k8s-ImageResizer-dev"
+            .sourceArn(sourceArn)                    // ARN of the APIGateway, e.g. "arn:aws:execute-api:us-east-1:...
             .build()
         )
       }
@@ -300,7 +298,7 @@ object Lambda {
       }
   }
 
-  /** Publishes iff changeds to config or function. Seems AWS takes care of version name
+  /** Publishes iff changed to config or function. Seems AWS takes care of version name
     * Please put the underlying code semantic version in description
     */
   def publish(fnName: String, desc: String)(implicit cs: ContextShift[IO]): IO[PublishVersionResponse] = {

@@ -9,6 +9,7 @@ import io.circe.syntax.EncoderOps
 import java.util
 import scala.jdk.CollectionConverters._
 
+// Monoid for this
 case class OTag(v: (String, String)) {
   def name: String    = v._1
   def content: String = v._2
@@ -19,7 +20,8 @@ object OTag {
   def from(name: String, content: String): OTag  = OTag((name, content))
 }
 
-/** Time to rewrite this too - tags for labbeling things in AWS, Yaml, Kubernetes each with their own quirls
+/** Time to rewrite this too - tags for labeling things in AWS, Yaml, Kubernetes each with their own quirks
+  * SemiGroup for this.
   * Seperate those out as validators and "fixers"  for the different use-cases
   */
 case class OTags(tags: Map[String, String]) {
@@ -31,10 +33,9 @@ case class OTags(tags: Map[String, String]) {
   def withName(s: String): OTags              = OTags(this.tags.updated("Name", s))
   def modifyName(fn: String => String): OTags = withName(fn(this.tags.getOrElse("Name", "")))
   def contains(t: OTag): Boolean              = tags.get(t.name).exists(_ === t.content)
-
   def getName: Option[String] = this.tags.get("Name")
 
-  /** Covertor to AWS subpackage tag type */
+  /** Convertor to AWS subpackage tag type */
   def via[T](fn: (String, String) => T): util.Collection[T] = OTags.toPackageTags(this, fn)
 
   def makeKubernetesLabelSafe: OTags = {
