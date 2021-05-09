@@ -1,9 +1,7 @@
 package com.odenzo.aws.ec2
 
-import cats._
 import cats.data._
 import cats.effect._
-import cats.effect.syntax.all._
 import cats.syntax.all._
 import com.odenzo.aws.{AwsErrorUtils, OTag, OTags}
 import com.odenzo.utils.OPrint.oprint
@@ -14,6 +12,7 @@ import software.amazon.awssdk.services.ec2.model._
 import java.time.Instant
 import java.util.UUID
 import scala.concurrent.duration._
+import scala.language.postfixOps
 object EC2 {
 
   import scala.jdk.CollectionConverters._
@@ -32,9 +31,8 @@ object EC2 {
     TagSpecification.builder().resourceType(resourceType).tags(tags.via(toEC2Tag)).build()
   }
 
-
   /** This may as well return IO[Unit] as nothing of interest in the response */
-  def tagResources(resourceIds: List[String], tags: OTags)(implicit cs: ContextShift[IO]): IO[CreateTagsResponse] = {
+  def tagResources(resourceIds: List[String], tags: OTags): IO[CreateTagsResponse] = {
     IOU.toIO(
       client.createTags(
         CreateTagsRequest.builder
@@ -45,13 +43,12 @@ object EC2 {
     )
   }
 
-  def tagResources(rq:CreateTagsRequest)(implicit cs:ContextShift[IO]): IO[CreateTagsResponse] = IOU.toIO(client.createTags(rq))
+  def tagResources(rq: CreateTagsRequest): IO[CreateTagsResponse] = IOU.toIO(client.createTags(rq))
 
-  def tagResource(resourceId: String, tags: OTags)(implicit cs: ContextShift[IO]): IO[CreateTagsResponse] =
+  def tagResource(resourceId: String, tags: OTags): IO[CreateTagsResponse] =
     tagResources(List(resourceId), tags)
 
-
-  def createKeyPair(keyname: String, tags: OTags)(implicit cs: ContextShift[IO]): IO[CreateKeyPairResponse] = {
+  def createKeyPair(keyname: String, tags: OTags): IO[CreateKeyPairResponse] = {
     IOU
       .toIO(
         client.createKeyPair(
@@ -63,21 +60,21 @@ object EC2 {
       )
   }
 
-  def listKeyPairs(filters: Filter*)(implicit cs: ContextShift[IO]): IO[List[KeyPairInfo]] = {
+  def listKeyPairs(filters: Filter*): IO[List[KeyPairInfo]] = {
     IOU
       .toIO(client.describeKeyPairs(DescribeKeyPairsRequest.builder.filters(filters.asJavaCollection).build()))
       .map(_.keyPairs().asScala.toList)
   }
 
   /** Just to avoid dealing with AWS FU exceptions */
-  def findKeyPairByName(keyname: String)(implicit cs: ContextShift[IO]): IO[Option[KeyPairInfo]] = {
+  def findKeyPairByName(keyname: String): IO[Option[KeyPairInfo]] = {
     listKeyPairs(EC2.filter("key-name", keyname)) >>= IOU.optionOne(s"KeyPair $keyname")
   }
 
-  def deleteKeyPairIfExists(name: String)(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def deleteKeyPairIfExists(name: String): IO[Unit] = {
     findKeyPairByName(name).flatMap(opt => deleteKeyPair(name).unlessA(opt.isEmpty))
   }
-  def deleteKeyPair(name: String)(implicit cs: ContextShift[IO]): IO[String] = {
+  def deleteKeyPair(name: String): IO[String] = {
     IOU
       .toIO(EC2.client.deleteKeyPair(DeleteKeyPairRequest.builder.keyName(name).build()))
       .as(s"Deleted KeyPair $name")
@@ -92,7 +89,7 @@ object EC2 {
       instanceType: String,
       securityGroups: NonEmptyList[SecurityGroup],
       tags: OTags
-  )(implicit cs: ContextShift[IO]): IO[Instance] = {
+  ): IO[Instance] = {
     val clientToken = UUID.randomUUID().toString
 
     val rq = RunInstancesRequest.builder
@@ -117,10 +114,10 @@ object EC2 {
     runInstances(rq).map(_.instances.asScala.toList) >>= IOU.exactlyOne(s"EC2 Instance")
   }
 
-  def runInstances(rq:RunInstancesRequest)(implicit cs:ContextShift[IO]): IO[RunInstancesResponse] = {
+  def runInstances(rq: RunInstancesRequest): IO[RunInstancesResponse] = {
     IOU.toIO(client.runInstances(rq))
   }
-  def describeInstanceStatus(id: String)(implicit cs: ContextShift[IO]): IO[InstanceStatus] = {
+  def describeInstanceStatus(id: String): IO[InstanceStatus] = {
     IOU
       .toIO(
         client.describeInstanceStatus(
@@ -135,7 +132,7 @@ object EC2 {
   }
 
   /** TODO FIXME: This is a bit of a pain... has state which goes to running, then status is initializing. Check Both? */
-  def waitForInstanceReady(id: String)(implicit cs: ContextShift[IO], timer: Timer[IO]): IO[InstanceStatus] = {
+  def waitForInstanceReady(id: String): IO[InstanceStatus] = {
     // TODO. switch to custom Cats Retry style with shouldRetrtFn
     FS2Utils.uniformRetry(10 seconds, 20) {
       describeInstanceStatus(id).flatMap { status: InstanceStatus =>
@@ -149,16 +146,16 @@ object EC2 {
     }
   }
 
-  def listAwsAmi()(implicit cs: ContextShift[IO]): IO[List[Image]] = {
+  def listAwsAmi(): IO[List[Image]] = {
     IOU.toIO(client.describeImages(DescribeImagesRequest.builder.owners("amazon").build())).map(_.images.asScala.toList)
   }
 
-  def findInstanceInVpcByName(vpc: Vpc, instanceName: String)(implicit cs: ContextShift[IO]): IO[Option[Instance]] = {
+  def findInstanceInVpcByName(vpc: Vpc, instanceName: String): IO[Option[Instance]] = {
     findRunningInstanceInVpc(vpc, tagFilter("Name", instanceName)) >>= IOU.optionOne(s"EC2 $instanceName")
   }
 
   /** Finds running EC2 instances with optional filters, at most one tagFilter though! */
-  def findRunningInstanceInVpc(vpc: Vpc, xtraFilters: Filter*)(implicit cs: ContextShift[IO]): IO[List[Instance]] = {
+  def findRunningInstanceInVpc(vpc: Vpc, xtraFilters: Filter*): IO[List[Instance]] = {
     val filters = Seq(filter("vpc-id", vpc.vpcId), filter("instance-state-name", "running")) ++ xtraFilters
     describeInstances(filters: _*)
       .flatMap(_.compile.toList)
@@ -175,21 +172,21 @@ object EC2 {
     s"""${i.instanceId} - ${iName} - # Networks: ${i.networkInterfaces().asScala.toList.length}"""
   }
 
-  def getInstanceById(id: String)(implicit cs: ContextShift[IO]): IO[Instance] =
+  def getInstanceById(id: String): IO[Instance] =
     describeInstances(EC2.filter("instance-id", id)).flatMap(_.compile.last) >>= IOU.required(s"EC2 Instance Id $id")
 
-  def findIpAddressesForInstance(vpc: Vpc, name: String)(implicit cs: ContextShift[IO]): IO[NodeAddr] = {
+  def findIpAddressesForInstance(vpc: Vpc, name: String): IO[NodeAddr] = {
     for {
       inst <- findInstanceInVpcByName(vpc, name) >>= IOU.required(s"Running EC2 Named $name")
     } yield NodeAddr(Option(inst.publicIpAddress()), Option(inst.publicDnsName()), inst.privateIpAddress(), inst.privateDnsName())
   }
 
-  def listInstances(filters: Filter*)(implicit cs: ContextShift[IO]): IO[List[Instance]] = {
+  def listInstances(filters: Filter*): IO[List[Instance]] = {
     describeInstances(filters: _*).flatMap(_.compile.toList)
   }
 
   /** This expands out the Node Instances from each Reservation */
-  def describeInstances(filters: Filter*)(implicit cs: ContextShift[IO]): IO[fs2.Stream[IO, Instance]] = {
+  def describeInstances(filters: Filter*): IO[fs2.Stream[IO, Instance]] = {
     val rq = DescribeInstancesRequest.builder.filters(filters.asJavaCollection).build()
     for {
       stream <- FS2Utils.toStream(client.describeInstancesPaginator(rq))

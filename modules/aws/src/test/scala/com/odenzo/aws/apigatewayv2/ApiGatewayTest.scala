@@ -1,9 +1,6 @@
 package com.odenzo.aws.apigatewayv2
 
-import cats._
-import cats.data._
 import cats.effect._
-import cats.effect.syntax.all._
 import cats.syntax.all._
 import com.odenzo.aws.apigateway.APIGateway
 import com.odenzo.aws.testutils.AWSBaseTest
@@ -39,7 +36,7 @@ class ApiGatewayTest extends AWSBaseTest {
   test("By Name Integration") {
     val apiName = "some-api"
 
-    val prog   = for {
+    val prog = for {
       api    <- APIGateway.getApiGateway(apiName) >>= IOU.exactlyOne(s"Gateway: $apiName")
       routes <- APIGateway.getApiRoutes(api.apiId)
       _      <- IO(scribe.debug(s"Routes (All): ${oprint(routes)}"))

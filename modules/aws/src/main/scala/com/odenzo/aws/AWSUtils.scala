@@ -1,10 +1,6 @@
 package com.odenzo.aws
 
-import cats._
-import cats.data._
-import cats.effect.syntax.all._
-import cats.effect.{ContextShift, IO, Timer, _}
-import cats.syntax.all._
+import cats.effect.IO
 import fs2.Stream
 
 import java.util.UUID
@@ -13,14 +9,13 @@ import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters.CollectionHasAsScala
 
-
 trait AWSUtils {
 
   import scala.jdk.FutureConverters._
 
   def scribeInfo(s: String): Unit = scribe.info(s)
 
-  def completableFutureToIO[A](fn: => CompletableFuture[A])(implicit cs: ContextShift[IO]): IO[A] = {
+  def completableFutureToIO[A](fn: => CompletableFuture[A]): IO[A] = {
 
     val ff: IO[Future[A]] = IO.delay(fn.asScala)
     IO.fromFuture(ff) // Does IO.async under the hood.
@@ -77,9 +72,9 @@ trait AWSUtils {
     * - Trial semantics to see how it works.
     * - The looping is delayed by 10 seconds with a max of 15 tries
     */
-  def waitWhile[A](tst: A => Boolean)(check: IO[Option[A]])(implicit cs: ContextShift[IO]): IO[Unit] = {
-    val ec                        = scala.concurrent.ExecutionContext.global
-    implicit val timer: Timer[IO] = IO.timer(ec)
+  def waitWhile[A](tst: A => Boolean)(check: IO[Option[A]]): IO[Unit] = {
+    val ec = scala.concurrent.ExecutionContext.global
+
     case class MarkedRetry(a: A) extends Throwable
     val afn = check.flatMap {
       case Some(v) => if (tst(v)) IO.raiseError(MarkedRetry(v)) else IO.unit
@@ -97,9 +92,9 @@ trait AWSUtils {
     * So the tst should be true when in desired state
     * @deprecated use checkUntil for better type infrerence
     */
-  def waitUntil[A](tst: A => Boolean)(check: IO[A])(implicit cs: ContextShift[IO]): IO[Unit] = {
-    val ec                        = scala.concurrent.ExecutionContext.global
-    implicit val timer: Timer[IO] = IO.timer(ec)
+  def waitUntil[A](tst: A => Boolean)(check: IO[A]): IO[Unit] = {
+    val ec = scala.concurrent.ExecutionContext.global
+
     case class MarkedRetry(a: A) extends Throwable
     val afn = check.flatMap(v => if (!tst(v)) IO.raiseError(MarkedRetry(v)) else IO.unit)
 
@@ -111,9 +106,8 @@ trait AWSUtils {
   }
 
   /** This has better type inference since normally check is defined fn already */
-  def checkUntil[A](check: IO[A])(tst: A => Boolean)(implicit cs: ContextShift[IO]): IO[Unit] = {
-    val ec                        = scala.concurrent.ExecutionContext.global
-    implicit val timer: Timer[IO] = IO.timer(ec)
+  def checkUntil[A](check: IO[A])(tst: A => Boolean): IO[Unit] = {
+    val ec = scala.concurrent.ExecutionContext.global
 
     case class MarkedRetry(a: A) extends Throwable
     val afn                   = check.flatMap(v => if (!tst(v)) IO.raiseError(MarkedRetry(v)) else IO.unit)
@@ -123,19 +117,18 @@ trait AWSUtils {
     Stream.retry(afn, interval, identity, maxAttempts, retryIf).compile.lastOrError
   }
 
-  def repeatWhile[T](fn: Unit => Boolean)(fa: IO[T])(implicit cs: ContextShift[IO]): IO[T] = {
-    implicit val timer: Timer[IO] = IO.timer(scala.concurrent.ExecutionContext.global)
-    val loopTime                  = FiniteDuration(3, TimeUnit.SECONDS)
+  def repeatWhile[T](fn: Unit => Boolean)(fa: IO[T]): IO[T] = {
+
+    val loopTime = FiniteDuration(3, TimeUnit.SECONDS)
     fa.flatMap { t: T => IO.sleep(loopTime).iterateUntil(fn) *> IO.pure(t) }
   }
 
   /** Executed Polling function loop, delaying 3 seconds between.
     * Polling function returns T and the condition checks, if cond true keeps looping
     */
-  def pollWhile[T](fn: T => Boolean)(pollFn: IO[T])(implicit cs: ContextShift[IO]): IO[T] = {
-    implicit val timer: Timer[IO] = IO.timer(scala.concurrent.ExecutionContext.global)
-    val loopTime                  = FiniteDuration(3, TimeUnit.SECONDS)
-    val loopFn: IO[T]             = IO.sleep(loopTime) *> pollFn
+  def pollWhile[T](fn: T => Boolean)(pollFn: IO[T]): IO[T] = {
+    val loopTime      = FiniteDuration(3, TimeUnit.SECONDS)
+    val loopFn: IO[T] = IO.sleep(loopTime) *> pollFn
     loopFn.iterateWhile(fn)
   }
 

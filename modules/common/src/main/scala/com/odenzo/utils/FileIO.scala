@@ -7,17 +7,17 @@ import scala.io.{Codec, Source}
 
 object FileIO {
 
-  def readUtfTextFile(f: File): IO[String] = {
+  def readUtfTextFile(f: File): SyncIO[String] = {
     inputStream(f).use { fis =>
-      IO(Source.fromInputStream(fis)(Codec.UTF8).getLines().mkString("\n"))
+      SyncIO.delay(Source.fromInputStream(fis)(Codec.UTF8).getLines().mkString("\n"))
     }
   }
 
-  def inputStream(f: File): Resource[IO, FileInputStream] =
+  def inputStream(f: File): Resource[SyncIO, FileInputStream] =
     Resource.make {
-      IO(new FileInputStream(f)) // build
+      SyncIO.delay(new FileInputStream(f)) // build
     } { inStream =>
-      IO(inStream.close()).handleErrorWith(_ => IO.unit) // release
+      SyncIO.delay(inStream.close()).handleErrorWith(_ => SyncIO.unit) // release
     }
 
   /** Resource Manaaged (File) OutputStream */

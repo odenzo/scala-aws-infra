@@ -1,8 +1,5 @@
 package com.odenzo.aws.eks
 
-import cats._
-import cats.data._
-import cats.syntax.all._
 import com.odenzo.aws.OTags
 import software.amazon.awssdk.services.ec2.model.{SecurityGroup, Subnet}
 import software.amazon.awssdk.services.eks.model._
@@ -12,8 +9,7 @@ import scala.jdk.CollectionConverters._
 
 object EksRequests {
 
-  /**
-    * @param subnets  Subnets for Cluster workers, properly tagged I guess
+  /** @param subnets  Subnets for Cluster workers, properly tagged I guess
     * @param securityGroups Primary and Sdcondary Security Groups for the Cluster
     * @return
     */

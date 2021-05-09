@@ -1,7 +1,5 @@
 package com.odenzo.utils
 
-import cats._
-import cats.data._
 import cats.syntax.all._
 
 /** Utilities for dealing with environment variables and system properties */

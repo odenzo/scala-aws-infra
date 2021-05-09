@@ -1,76 +1,120 @@
 object MyCompileOptions {
 
-  val optsV13: Seq[String] = Seq(
-    "-Ybackend-parallelism",         // Threads/cores
-    "10",
-    "-deprecation",                  // Emit warning and location for usages of deprecated APIs.
-    "-encoding",
-    "utf-8",                         // Specify character encoding used by source files.
-    "-explaintypes",                 // Explain type errors in more detail.
-    "-feature",                      // Emit warning and location for usages of features that should be imported explicitly.
-    "-language:postfixOps",          // Postfix ops, for Durations mostly
-    "-language:existentials",        // Existential types (besides wildcard types) can be written and inferred
-    "-language:experimental.macros", // Allow macro definition (besides implementation and application)
-    "-language:higherKinds",         // Allow higher-kinded types
-    "-language:implicitConversions", // Allow definition of implicit functions called views
-    // "-language:relectiveCalls",      // Try and avoid but GUICE
-    "-unchecked",                    // Enable additional warnings where generated code depends on assumptions.
-    "-Xcheckinit",                   // Wrap field accessors to throw an exception on uninitialized access.
-    "-Xsource:2.13",                 // Scala level
-    "-Ymacro-annotations"            // For macros, replaces macro paradise
-    // "-Xfatal-warnings", // Fail the compilation if there are any warnings.
-    //   "-Xfuture", // Turn on future language features.
-  )
+  val optsV2_13_5: Seq[String] =
+    Seq(
+   //   "-source:3.0-migration",
+      "-deprecation",                  // Emit warning and location for usages of deprecated APIs.
+      "-encoding",
+      "utf-8",                         // Specify character encoding used by source files.
+      "-explaintypes",                 // Explain type errors in more detail.
+      "-feature",                      // Emit warning and location for usages of features that should be imported explicitly.
+      "-language:existentials",        // Existential types (besides wildcard types) can be written and inferred
+      "-language:experimental.macros", // Allow macro definition (besides implementation and application)
+      "-language:higherKinds",         // Allow higher-kinded types
+      "-language:implicitConversions", // Allow definition of implicit functions called views
+      "-unchecked",                    // Enable additional warnings where generated code depends on assumptions.
+      "-Xcheckinit",                   // Wrap field accessors to throw an exception on uninitialized access.
+      "-Ymacro-annotations"            // Monocle etc..
+      // "-Xfatal-warnings", // Fail the compilation if there are any warnings.
+      //   "-Xfuture", // Turn on future language features.
+    )
 
-  val warningsV13: Seq[String] = Seq(
-    //"-Werror",            // Fail the compilation if there are any warnings.
-    "-Wdead-code",        //  Warn when dead code is identified.
-    "-Wextra-implicit",   // Warn when more than one implicit parameter section is defined.
-    // "-Wmacros:none", // Do not inspect expansions or their original trees when generating unused symbol warnings.
-    // "-Wmacros:before", // Only inspect unexpanded user-written code for unused symbols. (Default)
-    "-Wmacros:after",     // Only inspect expanded trees when generating unused symbol warnings.
-    // "-Wmacros:both", // Inspect both user-written code and expanded trees when generating unused symbol warnings.
-    "-Wnumeric-widen",    // Warn when numerics are widened.
-    "-Woctal-literal",    // Warn on obsolete octal syntax.
-    // "-Wself-implicit", // Warn when an implicit resolves to an enclosing self-definition.
-    //"-Wunused:imports",   //Warn if an import selector is not referenced.
-    "-Wunused:patvars",   // Warn if a variable bound in a pattern is unused.
-    "-Wunused:privates",  // Warn if a private member is unused.
-    "-Wunused:locals",    // Warn if a local definition is unused.
-    "-Wunused:explicits", // Warn if an explicit parameter is unused.
-    "-Wunused:implicits"  // Warn if an implicit parameter is unused.
-    //"-Wunused:params"     // Enable -Wunused:explicits,implicits.
-    //"-Wvalue-discard"     // Warn when non-Unit expression results are unused.
-  )
+  val warningsV2_13_5: Seq[String] =
+    Seq(
+      "-Ytasty-reader",
+      "-Ywarn-dead-code",     // Warn when dead code is identified.
+      "-Ywarn-extra-implicit" // Warn when more than one implicit parameter section is defined.
+      //"-Ywarn-inaccessible", // Warn about inaccessible types in method signatures. (Gone in 2.13)
+      // "-Ywarn-infer-any", // Warn when a type argument is inferred to be `Any`. (Gone in 2.13)
+      // "-Ywarn-nullary-override", // Warn when non-nullary `def f()' overrides nullary `def f'.
+      // "-Ywarn-nullary-unit", // Warn when nullary methods return Unit.
+      // "-Ywarn-numeric-widen", // Warn when numerics are widened.
+      //  "-Ywarn-unused:implicits", // Warn if an implicit parameter is unused.
+      //  "-Ywarn-unused:imports", // Warn if an import selector is not referenced.
+      //  "-Ywarn-unused:locals", // Warn if a local definition is unused.
+      //  "-Ywarn-unused:params", // Warn if a value parameter is unused.
+      //  "-Ywarn-unused:patvars", // Warn if a variable bound in a pattern is unused.
+      //  "-Ywarn-unused:privates", // Warn if a private member is unused.
+      //  "-Ywarn-value-discard" // Warn when non-Unit expression results are unused.
+    )
 
-  val lintersV13: Seq[String] = Seq(
-    // "-Xmigration",                   // Alert to things that changed for Scala version (like Seq -> immutable)
-    // ********** -Xlint: Enable recommended warnings ****************************
-    "-Xlint:adapted-args",           // Warn if an argument list is modified to match the receiver.
-    "-Xlint:nullary-unit",           // Warn when nullary methods return Unit.
-    "-Xlint:inaccessible",           // Warn about inaccessible types in method signatures.
-    //"-Xlint:nullary-override",       // Warn when non-nullary def f() overrides nullary def f.
-    "-Xlint:infer-any",              // Warn when a type argument is inferred to be Any.
-    "-Xlint:missing-interpolator",   // A string literal appears to be missing an interpolator id.
-    "-Xlint:doc-detached",           // A Scaladoc comment appears to be detached from its element.
-    "-Xlint:private-shadow",         // A private field (or class parameter) shadows a superclass field.
-    "-Xlint:type-parameter-shadow",  // A local type parameter shadows a type already in scope.
-    "-Xlint:poly-implicit-overload", // Parameterized overloaded implicit methods are not visible as view bounds.
-    "-Xlint:option-implicit",        // Option.apply used implicit view.
-    "-Xlint:delayedinit-select",     // Selecting member of DelayedInit.
-    "-Xlint:package-object-classes", // Class or object defined in package object.
-    "-Xlint:stars-align",            // Pattern sequence wildcard must align with sequence component.
-    "-Xlint:constant",               // Evaluation of a constant arithmetic expression results in an error.
-    "-Xlint:nonlocal-return",        // A return statement used an exception for flow control.
-    "-Xlint:implicit-not-found",     // Check @implicitNotFound and @implicitAmbiguous messages.
-    "-Xlint:serial",                 // @SerialVersionUID on traits and non-serializable classes.
-    "-Xlint:valpattern",             // Enable pattern checks in val definitions.
-    "-Xlint:eta-zero",               // Warn on eta-expansion (rather than auto-application) of zero-ary method.
-    "-Xlint:eta-sam",                // Warn on eta-expansion to meet a Java-defined functional interface that is not explicitly annotated with@FunctionalInterface.
-    "-Xlint:deprecation"             // Enable linted deprecations.
-  )
+  val lintersV2_13_5: Seq[String] =
+    Seq(
+      "-Xlint:adapted-args",           // Warn if an argument list is modified to match the receiver.
+      // "-Xlint:by-name-right-associative", // By-name parameter of right associative operator.
+      "-Xlint:constant",               // Evaluation of a constant arithmetic expression results in an error.
+      "-Xlint:delayedinit-select",     // Selecting member of DelayedInit.
+      "-Xlint:doc-detached",           // A Scaladoc comment appears to be detached from its element.
+      "-Xlint:inaccessible",           // Warn about inaccessible types in method signatures.
+      "-Xlint:infer-any",              // Warn when a type argument is inferred to be `Any`.
+      "-Xlint:missing-interpolator",   // A string literal appears to be missing an interpolator id.
+      //"-Xlint:nullary-override", // Warn when non-nullary `def f()' overrides nullary `def f'.
+      "-Xlint:nullary-unit",           // Warn when nullary methods return Unit.
+      "-Xlint:option-implicit",        // Option.apply used implicit view.
+      "-Xlint:package-object-classes", // Class or object defined in package object.
+      "-Xlint:poly-implicit-overload", // Parameterized overloaded implicit methods are not visible as view bounds.
+      "-Xlint:private-shadow",         // A private field (or class parameter) shadows a superclass field.
+      "-Xlint:stars-align",            // Pattern sequence wildcard must align with sequence component.
+      "-Xlint:type-parameter-shadow"   // A local type parameter shadows a type already in scope.
+      // "-Xlint:unsound-match", // Pattern match may not be typesafe.
+    )
 
-  val verboseOpt = Seq(
-    "-Vimplicits" // Show why implicits not used
-  )
+  val optsV3_0: Seq[String] =
+    Seq(
+      "-source:3.0-migration",
+      "-deprecation",                  // Emit warning and location for usages of deprecated APIs.
+      "-encoding",
+      "utf-8",                         // Specify character encoding used by source files.
+      "-explain",                 // Explain type errors in more detail.
+      "-explain-types",                 // Explain type errors in more detail.
+      "-print-lines",
+      "-feature",                      // Emit warning and location for usages of features that should be imported explicitly.
+      "-language:existentials",        // Existential types (besides wildcard types) can be written and inferred
+      "-language:experimental.macros", // Allow macro definition (besides implementation and application)
+      "-language:higherKinds",         // Allow higher-kinded types
+      "-language:implicitConversions", // Allow definition of implicit functions called views
+      "-unchecked",                    // Enable additional warnings where generated code depends on assumptions.
+      "-Xcheckinit",                   // Wrap field accessors to throw an exception on uninitialized access.
+
+    )
+
+  val warningsV3_0: Seq[String] =
+    Seq(
+      "-Ywarn-dead-code",     // Warn when dead code is identified.
+      "-Ywarn-extra-implicit" // Warn when more than one implicit parameter section is defined.
+      //"-Ywarn-inaccessible", // Warn about inaccessible types in method signatures. (Gone in 2.13)
+      // "-Ywarn-infer-any", // Warn when a type argument is inferred to be `Any`. (Gone in 2.13)
+      // "-Ywarn-nullary-override", // Warn when non-nullary `def f()' overrides nullary `def f'.
+      // "-Ywarn-nullary-unit", // Warn when nullary methods return Unit.
+      // "-Ywarn-numeric-widen", // Warn when numerics are widened.
+      //  "-Ywarn-unused:implicits", // Warn if an implicit parameter is unused.
+      //  "-Ywarn-unused:imports", // Warn if an import selector is not referenced.
+      //  "-Ywarn-unused:locals", // Warn if a local definition is unused.
+      //  "-Ywarn-unused:params", // Warn if a value parameter is unused.
+      //  "-Ywarn-unused:patvars", // Warn if a variable bound in a pattern is unused.
+      //  "-Ywarn-unused:privates", // Warn if a private member is unused.
+      //  "-Ywarn-value-discard" // Warn when non-Unit expression results are unused.
+    )
+
+  val lintersV3_0: Seq[String] =
+    Seq(
+      "-Xlint:adapted-args",           // Warn if an argument list is modified to match the receiver.
+      // "-Xlint:by-name-right-associative", // By-name parameter of right associative operator.
+      "-Xlint:constant",               // Evaluation of a constant arithmetic expression results in an error.
+      "-Xlint:delayedinit-select",     // Selecting member of DelayedInit.
+      "-Xlint:doc-detached",           // A Scaladoc comment appears to be detached from its element.
+      "-Xlint:inaccessible",           // Warn about inaccessible types in method signatures.
+      "-Xlint:infer-any",              // Warn when a type argument is inferred to be `Any`.
+      "-Xlint:missing-interpolator",   // A string literal appears to be missing an interpolator id.
+      //"-Xlint:nullary-override", // Warn when non-nullary `def f()' overrides nullary `def f'.
+      "-Xlint:nullary-unit",           // Warn when nullary methods return Unit.
+      "-Xlint:option-implicit",        // Option.apply used implicit view.
+      "-Xlint:package-object-classes", // Class or object defined in package object.
+      "-Xlint:poly-implicit-overload", // Parameterized overloaded implicit methods are not visible as view bounds.
+      "-Xlint:private-shadow",         // A private field (or class parameter) shadows a superclass field.
+      "-Xlint:stars-align",            // Pattern sequence wildcard must align with sequence component.
+      "-Xlint:type-parameter-shadow"   // A local type parameter shadows a type already in scope.
+      // "-Xlint:unsound-match", // Pattern match may not be typesafe.
+    )
+
 }

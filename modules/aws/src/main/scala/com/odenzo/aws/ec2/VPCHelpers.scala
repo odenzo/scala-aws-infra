@@ -1,8 +1,5 @@
 package com.odenzo.aws.ec2
 
-import cats._
-import cats.data._
-import cats.syntax.all._
 import software.amazon.awssdk.services.ec2.model._
 
 /** Some helpers to build requests.. typically in context of the given VPC, look at combining with RequestHelpers */

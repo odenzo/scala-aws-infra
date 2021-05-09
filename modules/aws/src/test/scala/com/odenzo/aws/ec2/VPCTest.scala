@@ -1,6 +1,4 @@
 package com.odenzo.aws.ec2
-import cats._
-import cats.data._
 import cats.effect.IO
 import cats.syntax.all._
 import com.odenzo.aws.testutils.AWSBaseTest

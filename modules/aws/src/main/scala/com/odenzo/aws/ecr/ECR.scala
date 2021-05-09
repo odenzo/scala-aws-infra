@@ -1,8 +1,7 @@
 package com.odenzo.aws.ecr
 
 import cats._
-import cats.data._
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
 import cats.syntax.all._
 import com.odenzo.utils.{FS2Utils, IOU}
 import fs2._
@@ -20,7 +19,7 @@ object ECR {
    */
 
   /** Basic upsert, if repository exists makes sure it is in state, else creates in state */
-  def ensureRepository(name: String, scan: Boolean = false, immutable: Boolean = false)(implicit cs: ContextShift[IO]): IO[Repository] = {
+  def ensureRepository(name: String, scan: Boolean = false, immutable: Boolean = false): IO[Repository] = {
     findRepository(name).flatMap {
       case None       => createRepository(name, scan, immutable)
       case Some(repo) =>
@@ -37,7 +36,7 @@ object ECR {
   /** A Simple Request/Response with CompleteableFuture style
     *  Do we turn it into a Stream for consistency?
     */
-  def createRepository(name: String, scan: Boolean = false, immutable: Boolean = false)(implicit cs: ContextShift[IO]): IO[Repository] = {
+  def createRepository(name: String, scan: Boolean = false, immutable: Boolean = false): IO[Repository] = {
     val mutability = if (immutable) ImageTagMutability.IMMUTABLE else ImageTagMutability.MUTABLE
 
     IOU
@@ -53,19 +52,19 @@ object ECR {
       .map(_.repository)
   }
 
-  def describeRepositories()(implicit cs: ContextShift[IO]): IO[Stream[IO, Repository]] = {
+  def describeRepositories(): IO[Stream[IO, Repository]] = {
     for {
       stream <- FS2Utils.toStream(client.describeRepositoriesPaginator())
       burst   = stream.map(_.repositories().asScala.toList).flatMap(Stream.emits)
     } yield burst
   }
 
-  def findRepository(name: String)(implicit cs: ContextShift[IO]): IO[Option[Repository]] = {
+  def findRepository(name: String): IO[Option[Repository]] = {
     describeRepositories().flatMap(stream => stream.filter(_.repositoryName === name).compile.last)
   }
 
   /** Not using filters on API side */
-  def listImages(repo: String)(implicit cs: ContextShift[IO]) = {
+  def listImages(repo: String) = {
     for {
       stream <- FS2Utils.toStream(client.describeImagesPaginator(DescribeImagesRequest.builder.repositoryName(repo).build()))
       content = stream.map(_.imageDetails().asScala.toList).flatMap(fs2.Stream.emits)
@@ -73,7 +72,7 @@ object ECR {
   }
 
   /** Uses default registry for user account */
-  def setImageScanning(repo: String, onPush: Boolean)(implicit cs: ContextShift[IO]) = {
+  def setImageScanning(repo: String, onPush: Boolean) = {
     IOU.toIO {
       client.putImageScanningConfiguration(
         PutImageScanningConfigurationRequest.builder
@@ -85,7 +84,7 @@ object ECR {
   }
 
   /** Uses default registry for user account */
-  def setImmutableImages(repo: String, immutableTags: Boolean)(implicit cs: ContextShift[IO]) = {
+  def setImmutableImages(repo: String, immutableTags: Boolean) = {
     IOU.toIO {
       client.putImageTagMutability(
         PutImageTagMutabilityRequest.builder
@@ -99,15 +98,15 @@ object ECR {
   /** Gets the access token for default ECR registry based on caller creds (access token actually, same as aws ecr get-login-password?
     * This will also return the proxy endpoint yeah!
     */
-  def getECRPassword()(implicit cs: ContextShift[IO]): IO[AuthorizationData] = {
+  def getECRPassword(): IO[AuthorizationData] = {
     IOU.toIO(client.getAuthorizationToken()).map(_.authorizationData().asScala.toList) >>= IOU.exactlyOne(s"ECR Token")
   }
 
-  def getEndpoint()(implicit cs: ContextShift[IO]): IO[String] = {
+  def getEndpoint(): IO[String] = {
     getECRPassword().map(_.proxyEndpoint())
   }
 
-  def getEndpointHost()(implicit cs: ContextShift[IO]): IO[String] = {
+  def getEndpointHost(): IO[String] = {
     getECRPassword().map(_.proxyEndpoint().drop("https://".length))
   }
 }

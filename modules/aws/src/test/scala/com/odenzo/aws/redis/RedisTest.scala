@@ -1,7 +1,5 @@
 package com.odenzo.aws.redis
 
-import cats._
-import cats.data._
 import cats.syntax.all._
 import com.odenzo.aws.testutils.AWSBaseTest
 import com.odenzo.utils.IOU

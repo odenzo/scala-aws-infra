@@ -1,9 +1,6 @@
 package com.odenzo.aws.s3
 
-import cats._
-import cats.data._
-import cats.effect.syntax.all._
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
 import cats.syntax.all._
 import com.odenzo.aws.{AWSUtils, AwsErrorUtils, OTag, OTags}
 import com.odenzo.utils.OPrint.oprint
@@ -13,7 +10,6 @@ import io.circe.literal.JsonStringContext
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3AsyncClient
 import software.amazon.awssdk.services.s3.model._
-import software.amazon.awssdk.services.s3.paginators.ListObjectsV2Publisher
 
 import java.time.{OffsetDateTime, ZoneOffset}
 import java.util.UUID
@@ -34,7 +30,7 @@ object S3 extends AWSUtils with AwsErrorUtils {
   /** Returns the location, which is not too exciting. This doesn't fail if bucker already exists beliedve it or not!?
     * Will Tag the bucket too.
     */
-  def createBucket(name: String, acl: BucketCannedACL, tags: OTags)(implicit cs: ContextShift[IO]): IO[String] = {
+  def createBucket(name: String, acl: BucketCannedACL, tags: OTags): IO[String] = {
     IO(scribe.debug(s"Creating S3 Bucket $name ACL $acl")) *>
       IOU
         .toIO(
@@ -52,7 +48,7 @@ object S3 extends AWSUtils with AwsErrorUtils {
   /** FOr thw common use case, owner owns. Public can read objects but not list contents. Owner rwx
     * No versioning or object locks.
     */
-  def createPublicBucket(bucketName: String, tags: OTags)(implicit cs: ContextShift[IO]): IO[Bucket] = {
+  def createPublicBucket(bucketName: String, tags: OTags): IO[Bucket] = {
     // Accomplished hopefully with just a Policy
     for {
       _       <- createBucket(bucketName, BucketCannedACL.PRIVATE, tags)
@@ -61,7 +57,7 @@ object S3 extends AWSUtils with AwsErrorUtils {
     } yield nbucket
   }
 
-  def setBucketPolicyPublicRead(bucketName: String)(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def setBucketPolicyPublicRead(bucketName: String): IO[Unit] = {
     val statementId = UUID.randomUUID().toString
     val policyId    = UUID.randomUUID().toString
     val resourceArn = s"arn:aws:s3:::$bucketName/*" // Maybe just bucket/generated/*?
@@ -81,11 +77,11 @@ object S3 extends AWSUtils with AwsErrorUtils {
   }
 
   /** Error if not existing */
-  def getPolicy(bucketName: String)(implicit cs: ContextShift[IO]): IO[GetBucketPolicyResponse] = {
+  def getPolicy(bucketName: String): IO[GetBucketPolicyResponse] = {
     IOU.toIO(client.getBucketPolicy(GetBucketPolicyRequest.builder().bucket(bucketName).build()))
   }
 
-  def putPolicy(bucketName: String, policy: Json)(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def putPolicy(bucketName: String, policy: Json): IO[Unit] = {
     IOU
       .toIO(
         client.putBucketPolicy(
@@ -99,11 +95,11 @@ object S3 extends AWSUtils with AwsErrorUtils {
       .void
   }
 
-  def getACL(bucketName: String)(implicit cs: ContextShift[IO]): IO[GetBucketAclResponse] = {
+  def getACL(bucketName: String): IO[GetBucketAclResponse] = {
     IOU.toIO(client.getBucketAcl(GetBucketAclRequest.builder().bucket(bucketName).build))
   }
 
-  def tagBucket(bucketName: String, tags: OTags)(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def tagBucket(bucketName: String, tags: OTags): IO[Unit] = {
     IOU
       .toIO(
         client
@@ -122,7 +118,7 @@ object S3 extends AWSUtils with AwsErrorUtils {
     * Note that the delete bucket might have to delete folders and objects other stuff (triggers).
     * Only folders and objects will be added here. Whoever added other stuff needs to delete that.
     */
-  def deleteBucketsWithTag(tag: OTag)(implicit cs: ContextShift[IO]): IO[List[(Bucket, List[Tag])]] = {
+  def deleteBucketsWithTag(tag: OTag): IO[List[(Bucket, List[Tag])]] = {
     val atag: Tag = S3.s3Tag.tupled(tag.v)
     IOU
       .toIO(client.listBuckets())
@@ -141,7 +137,7 @@ object S3 extends AWSUtils with AwsErrorUtils {
 
   }
 
-  def deleteBucketAndObjects(bucketName: String)(implicit cs: ContextShift[IO]): IO[String] = {
+  def deleteBucketAndObjects(bucketName: String): IO[String] = {
     fs2
       .Stream(bucketName)
       .debug(oprint(_), scribeInfo)
@@ -151,7 +147,7 @@ object S3 extends AWSUtils with AwsErrorUtils {
       .lastOrError
   }
 
-  def getBucketTags(bucketName: String)(implicit cs: ContextShift[IO]): IO[List[Tag]] = {
+  def getBucketTags(bucketName: String): IO[List[Tag]] = {
 
     // This  error if no tagSet, no consistency at all...sigh. NoSuchTagSet nested err
     IOU
@@ -167,17 +163,17 @@ object S3 extends AWSUtils with AwsErrorUtils {
   def getBucketArn(name: String): IO[String] = IO.pure(s"arn:aws:s3:::$name")
 
   /** List the buckets owned by the caller/IAM */
-  def listBuckets()(implicit cs: ContextShift[IO]): IO[List[Bucket]] = IOU.toIO(client.listBuckets()).map(_.buckets().asScala.toList)
+  def listBuckets(): IO[List[Bucket]] = IOU.toIO(client.listBuckets()).map(_.buckets().asScala.toList)
 
-  def findBucket(name: String)(implicit cs: ContextShift[IO]): IO[Option[Bucket]] = listBuckets().map(_.find(_.name === name))
+  def findBucket(name: String): IO[Option[Bucket]] = listBuckets().map(_.find(_.name === name))
 
-  def getBucket(name: String)(implicit cs: ContextShift[IO]): IO[Bucket] = findBucket(name) >>= IOU.required(s"Bucket $name")
+  def getBucket(name: String): IO[Bucket] = findBucket(name) >>= IOU.required(s"Bucket $name")
 
-  def getWebsiteServerConfig(bucketName: String)(implicit cs: ContextShift[IO]): IO[GetBucketWebsiteResponse] = {
+  def getWebsiteServerConfig(bucketName: String): IO[GetBucketWebsiteResponse] = {
     IOU.toIO(client.getBucketWebsite(GetBucketWebsiteRequest.builder.bucket(bucketName).build()))
   }
 
-  def deleteBucketIfExists(name: String)(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def deleteBucketIfExists(name: String): IO[Unit] = {
     findBucket(name).flatMap {
       case None    => IO(scribe.info(s"S3 Bucket $name didn't exist so no deleting."))
       case Some(_) => deleteBucket(name).void
@@ -185,12 +181,12 @@ object S3 extends AWSUtils with AwsErrorUtils {
   }
 
   /** Probably has to be empty first */
-  def deleteBucket(name: String)(implicit cs: ContextShift[IO]): IO[DeleteBucketResponse] = {
+  def deleteBucket(name: String): IO[DeleteBucketResponse] = {
     IOU.toIO(client.deleteBucket(DeleteBucketRequest.builder().bucket(name).build))
   }
 
   /** Enable versionioning on an S3 Bucket, enabled or suspendeds */
-  def versionBucket(name: String, enabled: Boolean)(implicit cs: ContextShift[IO]): IO[PutBucketVersioningResponse] = {
+  def versionBucket(name: String, enabled: Boolean): IO[PutBucketVersioningResponse] = {
     IOU.toIO {
       client.putBucketVersioning(
         PutBucketVersioningRequest
@@ -207,7 +203,7 @@ object S3 extends AWSUtils with AwsErrorUtils {
   }
 
   /** List the contents of a bukcer as a Stream */
-  def listBucketContents(bucketName: String)(implicit cs: ContextShift[IO]): IO[fs2.Stream[IO, S3Object]] = {
+  def listBucketContents(bucketName: String): IO[fs2.Stream[IO, S3Object]] = {
     val req = ListObjectsV2Request.builder.bucket(bucketName).build()
 
     for {
@@ -220,7 +216,7 @@ object S3 extends AWSUtils with AwsErrorUtils {
   /** A list of object identifiers, key(s) seem ike they should works
     * Generally chunk the keys into list of 100 or so?
     */
-  def deleteObjects(bucketName: String, keys: Seq[String])(implicit cs: ContextShift[IO]): IO[DeleteObjectsResponse] = {
+  def deleteObjects(bucketName: String, keys: Seq[String]): IO[DeleteObjectsResponse] = {
     val objIds = keys.map(ObjectIdentifier.builder().key(_).build()).asJavaCollection
     IOU.toIO {
       client.deleteObjects(
@@ -237,7 +233,7 @@ object S3 extends AWSUtils with AwsErrorUtils {
     * The response has a list of succesful deletions and errors.
     * This just a pass through the errors
     */
-  def emptyBucket(bucketName: String)(implicit cs: ContextShift[IO]): IO[List[S3Error]] = {
+  def emptyBucket(bucketName: String): IO[List[S3Error]] = {
     listBucketContents(bucketName).flatMap { stream =>
       stream
         .map(_.key)
@@ -262,9 +258,7 @@ object S3 extends AWSUtils with AwsErrorUtils {
   /** Creates an Event in S3 bucket for all objects with prefix and suffix filter (e.g. folder/ and .ext).
     * The events gets bound to the existing lambdaFunction as an async trigger
     */
-  def addCreatedEventNotification(bucketName: String, prefixFilter: String, suffixFilter: String, lambdaFnArn: String)(
-      implicit cs: ContextShift[IO]
-  ): IO[Unit] = {
+  def addCreatedEventNotification(bucketName: String, prefixFilter: String, suffixFilter: String, lambdaFnArn: String): IO[Unit] = {
     val folderExtFilter = NotificationConfigurationFilter.builder.key(filterer(prefixFilter, suffixFilter)).build()
     // Meh, this used to work, upgrade AWS and get a not-well formed XML or broken schema
     val rq              = PutBucketNotificationConfigurationRequest.builder
@@ -287,7 +281,7 @@ object S3 extends AWSUtils with AwsErrorUtils {
   }
 
   /** This is really just overriding the notificationConfiguration to be none (All notifications not just lambda) */
-  def deleteBucketEventNotifications(bucketName: String)(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def deleteBucketEventNotifications(bucketName: String): IO[Unit] = {
     IOU
       .toIO(
         client.putBucketNotificationConfiguration(
@@ -314,16 +308,13 @@ object S3 extends AWSUtils with AwsErrorUtils {
       }
   }
 
-  /**
-    * @param bucket   Bucket Name
+  /** @param bucket   Bucket Name
     * @param filterMapFn A function which takes the S3 Object and extracts a groupig pattern + anything else.
     *           A None is returned to discard (typically non matching items)
     *           Note the original S3Object may also kept for non-empty, but up to the filterMapFn to do it.
     * @return
     */
-  def groupContentsByFilterMap[T, U](bucket: String, filterMapFn: S3Object => Option[(T, U)])(
-      implicit cs: ContextShift[IO]
-  ): IO[Map[T, List[U]]] = {
+  def groupContentsByFilterMap[T, U](bucket: String, filterMapFn: S3Object => Option[(T, U)]): IO[Map[T, List[U]]] = {
     // Note the Map returned contains unsorted lists.
     listBucketContents(bucket)
       .flatMap(stream => stream.mapFilter(filterMapFn).compile.toList)
@@ -331,7 +322,7 @@ object S3 extends AWSUtils with AwsErrorUtils {
   }
 
   /** If we can find the bucket then delete the website condig */
-  def deleteBucketWebsite(bucketName: String)(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def deleteBucketWebsite(bucketName: String): IO[Unit] = {
     val deleteWebsiteConfig: IO[DeleteBucketWebsiteResponse] =
       IOU.toIO(client.deleteBucketWebsite(DeleteBucketWebsiteRequest.builder.bucket(bucketName).build()))
     for {
@@ -340,7 +331,7 @@ object S3 extends AWSUtils with AwsErrorUtils {
     } yield ()
   }
 
-  def listObjects(bucketName:String, prefix:String)(implicit cs:ContextShift[IO]): IO[fs2.Stream[IO, S3Object]] = {
+  def listObjects(bucketName: String, prefix: String): IO[fs2.Stream[IO, S3Object]] = {
     FS2Utils.toBurstStream {
       client.listObjectsV2Paginator(ListObjectsV2Request.builder().bucket(bucketName).prefix(prefix).build())
     }(c => AWSUtils.fromJList(c.contents()))

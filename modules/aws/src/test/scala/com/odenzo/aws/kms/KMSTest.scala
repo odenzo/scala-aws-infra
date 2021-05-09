@@ -1,8 +1,7 @@
 package com.odenzo.aws.kms
 
-import cats.data._
+import cats.MonadError
 import cats.effect.IO
-import cats.{MonadError, _}
 import com.odenzo.aws.testutils.AWSBaseTest
 import com.odenzo.utils.OPrint.oprint
 
@@ -47,8 +46,7 @@ class KMSTest extends AWSBaseTest {
     } yield (text, txt2)
 
     val (txt, t2) = prog.unsafeRunSync()
-    scribe.debug(s"\n$txt \n $t2")
-    txt mustEqual t2
+    assertEquals(txt, t2)
 
   }
 

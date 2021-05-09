@@ -1,10 +1,7 @@
 package com.odenzo.aws.lambda
 
-import cats._
-import cats.data._
 import cats.syntax.all._
 import com.odenzo.aws.testutils.AWSBaseTest
-import com.odenzo.utils.EnvVar
 import com.odenzo.utils.OPrint.oprint
 import software.amazon.awssdk.services.lambda.model.FunctionConfiguration
 
@@ -30,8 +27,6 @@ class LambdaTest extends AWSBaseTest {
       scribe.info(s"Layers Found ${oprint(l)}")
     }
   }
-
-
 
   test("Describe Function") {
     val conf: Seq[FunctionConfiguration] = Lambda.findFunction("DevCmsConverter").unsafeRunSync()

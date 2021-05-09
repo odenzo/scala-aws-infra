@@ -1,7 +1,5 @@
 package com.odenzo.aws.ec2
 
-import cats._
-import cats.data._
 import cats.effect._
 import cats.syntax.all._
 import com.odenzo.aws.{AWSUtils, OTag, OTags}
@@ -14,7 +12,7 @@ import scala.jdk.CollectionConverters._
 /** Networking Stuff -  VPC, ENI, EIP, IGW (Should move to NatGateways */
 object VPC {
 
-  def describeVPCs()(implicit cs: ContextShift[IO]): IO[Stream[IO, Vpc]] = {
+  def describeVPCs(): IO[Stream[IO, Vpc]] = {
     for {
       stream <- FS2Utils.toStream { EC2.client.describeVpcsPaginator }
       content = stream.map(_.vpcs().asScala.toList)
@@ -25,48 +23,48 @@ object VPC {
   /** Finds the VPC with eksctl.cluster.k8s.io cluster name. Not terribly stable. EmptyList is not found.
     * Should always have 0 or 1 really.
     */
-  def filterVpc(fn: Vpc => Boolean)(implicit cs: ContextShift[IO]): IO[List[Vpc]] = {
+  def filterVpc(fn: Vpc => Boolean): IO[List[Vpc]] = {
     for {
       stream <- describeVPCs()
       vpcs   <- stream.filter(fn).compile.toList
     } yield vpcs
   }
 
-  def listVpcByTag(otag: OTag)(implicit cs: ContextShift[IO]): IO[List[Vpc]] = {
+  def listVpcByTag(otag: OTag): IO[List[Vpc]] = {
     val tag: Tag           = EC2.toEC2Tag(otag.name, otag.content)
     val fn: Vpc => Boolean = _.tags().contains(tag)
     filterVpc(fn)
   }
 
   /** Finds 0 or 1 VPC with given tag */
-  def findVpcByTag(tag: OTag)(implicit cs: ContextShift[IO]): IO[Option[Vpc]] = {
+  def findVpcByTag(tag: OTag): IO[Option[Vpc]] = {
     listVpcByTag(tag) >>= IOU.optionOne(s"VPC for $tag")
   }
 
-  def getVpcByTag(tag: OTag)(implicit cs: ContextShift[IO]): IO[Vpc] = {
+  def getVpcByTag(tag: OTag): IO[Vpc] = {
     listVpcByTag(tag) >>= IOU.exactlyOne(s"VPC for $tag")
   }
 
   /** Raises error if more than one  found */
-  def findVpcById(id: String)(implicit cs: ContextShift[IO]): IO[Option[Vpc]] = {
+  def findVpcById(id: String): IO[Option[Vpc]] = {
     val fn: Vpc => Boolean = id === _.vpcId
     filterVpc(fn) >>= IOU.optionOne(s"VPC ID $id")
   }
 
-  def getVpcById(id: String)(implicit cs: ContextShift[IO]): IO[Vpc] = findVpcById(id) >>= IOU.required(s"VPC ID $id")
+  def getVpcById(id: String): IO[Vpc] = findVpcById(id) >>= IOU.required(s"VPC ID $id")
 
-  def findVpcByClusterName(name: String)(implicit cs: ContextShift[IO]): IO[Option[Vpc]] = {
+  def findVpcByClusterName(name: String): IO[Option[Vpc]] = {
     val tag = OTag("horn/cluster", s"$name")
     listVpcByTag(tag) >>= IOU.optionOne(s"VPC for $tag")
   }
 
-  def getVpcByClusterName(name: String)(implicit cs: ContextShift[IO]): IO[Vpc] =
+  def getVpcByClusterName(name: String): IO[Vpc] =
     findVpcByClusterName(name) >>= IOU.required(s"VPC for Name $name")
 
   /** Creates a basic VPC with given CIDR Block - this is a building component. subnets etc to be added
     * This will return a VPC with a state (probably pending) Unnamed/tagged Not sure we can tag before its out of Pending
     */
-  def createVpc(cidrBlock: CidrBlock)(implicit cs: ContextShift[IO]): IO[Vpc] = {
+  def createVpc(cidrBlock: CidrBlock): IO[Vpc] = {
     IOU
       .toIO(
         EC2.client.createVpc(
@@ -79,7 +77,7 @@ object VPC {
       .map(_.vpc())
   }
 
-  def deleteVpc(vpc: Vpc)(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def deleteVpc(vpc: Vpc): IO[Unit] = {
     IOU
       .toIO(EC2.client.deleteVpc(DeleteVpcRequest.builder.vpcId(vpc.vpcId).build()))
       .void
@@ -88,7 +86,7 @@ object VPC {
   /** Enables  DnsSupport for the given (existing) VPC. AWS can only set one attribute at a time ^_^
     * DNS resolution is enabled by default, so enable DNsHostname  I think DNS Supprt is ClassicLink
     */
-  def enableDnsOnVpc(vpc: Vpc)(implicit cs: ContextShift[IO]): IO[ModifyVpcAttributeResponse] = {
+  def enableDnsOnVpc(vpc: Vpc): IO[ModifyVpcAttributeResponse] = {
     IOU.toIO(
       EC2.client.modifyVpcAttribute(
         ModifyVpcAttributeRequest.builder
@@ -100,7 +98,7 @@ object VPC {
   }
 
   /** Stream of all Elastic Network Interfaces (ENI) */
-  def listEni()(implicit cs: ContextShift[IO]): IO[Stream[IO, NetworkInterface]] = {
+  def listEni(): IO[Stream[IO, NetworkInterface]] = {
     for {
       stream <- FS2Utils.toStream(EC2.client.describeNetworkInterfacesPaginator())
       content = stream.map(_.networkInterfaces().asScala.toList)
@@ -108,20 +106,20 @@ object VPC {
     } yield burst
   }
 
-  def listEni(inVpc: Vpc)(implicit cs: ContextShift[IO]): IO[List[NetworkInterface]] = {
+  def listEni(inVpc: Vpc): IO[List[NetworkInterface]] = {
     listEni().flatMap { stream =>
       stream.filter(_.vpcId.equals(inVpc.vpcId)).compile.toList
     }
   }
 
-  def deleteEni(id: String)(implicit cs: ContextShift[IO]): IO[DeleteNetworkInterfaceResponse] = {
+  def deleteEni(id: String): IO[DeleteNetworkInterfaceResponse] = {
     IO(scribe.info(s"Deleteing ENI $id")) *>
       IOU.toIO(EC2.client.deleteNetworkInterface(DeleteNetworkInterfaceRequest.builder.networkInterfaceId(id).build()))
 
   }
 
   /** Creates an Internet Gateway and associated with given VPC */
-  def createInternetGateway(vpc: Vpc)(implicit cs: ContextShift[IO]): IO[InternetGateway] = {
+  def createInternetGateway(vpc: Vpc): IO[InternetGateway] = {
     val assocIg    = AttachInternetGatewayRequest.builder.vpcId(vpc.vpcId).internetGatewayId(_: String).build
     val describeIg = DescribeInternetGatewaysRequest.builder.internetGatewayIds(_: String).build
 
@@ -133,7 +131,7 @@ object VPC {
     } yield res
   }
 
-  def listInternetGateways(vpc: Vpc)(implicit cs: ContextShift[IO]): IO[List[InternetGateway]] = {
+  def listInternetGateways(vpc: Vpc): IO[List[InternetGateway]] = {
     IOU
       .toIO(
         EC2.client
@@ -148,7 +146,7 @@ object VPC {
   }
 
   /** Creates EIP if doesn't exist, applies tags regardless */
-  def createEipIffNeeded(tagName: String, tags: OTags)(implicit cs: ContextShift[IO]): IO[Address] = {
+  def createEipIffNeeded(tagName: String, tags: OTags): IO[Address] = {
     for {
       addrOpt <- VPC.findAddress(EC2.tagFilter("Name", tagName))
       addr    <- addrOpt match {
@@ -162,29 +160,29 @@ object VPC {
     * Tag using EC2.tagResource. To use we will assign to EC2 Instance.
     * See asssocateIpToInstance below
     */
-  def allocateElasticIP(tags: OTags)(implicit cs: ContextShift[IO]): IO[AllocateAddressResponse] = {
+  def allocateElasticIP(tags: OTags): IO[AllocateAddressResponse] = {
     IOU
       .toIO(EC2.client.allocateAddress(AllocateAddressRequest.builder.domain(DomainType.VPC).build()))
       .flatTap(aar => EC2.tagResource(aar.allocationId(), tags))
   }
 
   /** Find Elasteic IP by Name */
-  def describeElasticIpNamed(named: String)(implicit cs: ContextShift[IO]): IO[List[Address]] = {
+  def describeElasticIpNamed(named: String): IO[List[Address]] = {
     describeAddresses(List(EC2.tagFilter("Name", named)))
   }
 
-  def describeElasticIP(tagKey: String, tagVal: String)(implicit cs: ContextShift[IO]): IO[List[Address]] =
+  def describeElasticIP(tagKey: String, tagVal: String): IO[List[Address]] =
     describeAddresses(List(EC2.tagFilter(tagKey, tagVal)))
 
-  def getAddress(filters: Filter*)(implicit cs: ContextShift[IO]): IO[Address] =
+  def getAddress(filters: Filter*): IO[Address] =
     findAddress(filters: _*) >>= IOU.required(s"Adddress w/ Filters $filters")
 
   /** Find an Addresss/EIP ensuring 0 or 1 exist */
-  def findAddress(filters: Filter*)(implicit cs: ContextShift[IO]): IO[Option[Address]] = {
+  def findAddress(filters: Filter*): IO[Option[Address]] = {
     describeAddresses(filters) >>= IOU.optionOne(s"EIP Filteres $filters")
   }
 
-  def describeAddresses(filters: Seq[Filter])(implicit cs: ContextShift[IO]): IO[List[Address]] = {
+  def describeAddresses(filters: Seq[Filter]): IO[List[Address]] = {
     // No scrolling of pagination for this one.
     IOU
       .toIO(
@@ -201,7 +199,7 @@ object VPC {
     * Allows re-association and returns the association id.
     * If an instance has more than one ENI this cannot be used (as is common for kubernetes)
     */
-  def associateElasticIP2Instance(eipAllocationId: String, ec2InstanceId: String)(implicit cs: ContextShift[IO]): IO[String] = {
+  def associateElasticIP2Instance(eipAllocationId: String, ec2InstanceId: String): IO[String] = {
     IOU
       .toIO(
         EC2.client.associateAddress(
@@ -216,7 +214,7 @@ object VPC {
       .map(_.associationId())
   }
 
-  def associateElasticIP2Eni(eipAllocationId: String, eniId: String)(implicit cs: ContextShift[IO]): IO[String] = {
+  def associateElasticIP2Eni(eipAllocationId: String, eniId: String): IO[String] = {
     IOU
       .toIO(
         EC2.client.associateAddress(
@@ -231,7 +229,7 @@ object VPC {
   }
 
   /** Unbind an EIP from its endpoint, idempotent */
-  def deAssociateEIP(associationId: String)(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def deAssociateEIP(associationId: String): IO[Unit] = {
     IOU
       .toIO(
         EC2.client.disassociateAddress(
@@ -243,17 +241,17 @@ object VPC {
       .void
   }
 
-  def describeAggregateIds()(implicit cs: ContextShift[IO]): IO[List[IdFormat]] = {
+  def describeAggregateIds(): IO[List[IdFormat]] = {
     IOU.toIO(EC2.client.describeAggregateIdFormat()).map(_.statuses().asScala.toList)
   }
 
-  def describeNetworkInterfaceForAssociationId(associationId: String)(implicit cs: ContextShift[IO]): IO[Option[NetworkInterface]] = {
+  def describeNetworkInterfaceForAssociationId(associationId: String): IO[Option[NetworkInterface]] = {
     val f = EC2.filter("association.association-id", associationId)
     describeNetworkInterface(List(f)).flatMap(_.compile.toList) >>= IOU.optionOne(s"ENI for Association $associationId")
   }
 
   /** ENI describe */
-  def describeNetworkInterface(filters: List[Filter])(implicit cs: ContextShift[IO]): IO[Stream[IO, NetworkInterface]] = {
+  def describeNetworkInterface(filters: List[Filter]): IO[Stream[IO, NetworkInterface]] = {
 
     FS2Utils.toBurstStream(
       EC2.client.describeNetworkInterfacesPaginator(
@@ -267,7 +265,7 @@ object VPC {
   }
 
   /** This is only applicable to creating a vpc, not deleting it. */
-  def checkVpcState(vpc: Vpc)(implicit cs: ContextShift[IO]): IO[Vpc] = {
+  def checkVpcState(vpc: Vpc): IO[Vpc] = {
     getVpcById(vpc.vpcId).map { v =>
       val msg = s"VPC ${v.vpcId} State: ${v.state}"
       scribe.info(s"$msg")
@@ -282,7 +280,7 @@ object VPC {
   /** Waits while VPC is PENDING until its available. If it hits a different state throws error.
     * If VPC can't be found throws error
     */
-  def waitForVpcResolution(vpc: Vpc)(implicit cs: ContextShift[IO]): IO[Vpc] = {
+  def waitForVpcResolution(vpc: Vpc): IO[Vpc] = {
     def checkNotReady(vpc: Vpc) = {
       vpc.state match {
         case VpcState.AVAILABLE => false

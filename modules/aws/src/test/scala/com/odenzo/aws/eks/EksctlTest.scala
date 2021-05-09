@@ -1,9 +1,6 @@
 package com.odenzo.aws.eks
 
-import cats._
-import cats.data._
 import cats.effect._
-import cats.effect.syntax.all._
 import com.odenzo.aws.CIDR
 import com.odenzo.aws.ec2.{EC2, VPC}
 import com.odenzo.aws.eks.eksctl.EksctlCommand
@@ -43,7 +40,7 @@ class EksctlTest extends AWSBaseTest {
     scribe.debug(s"Command: ${oprint(cmd)}")
 
     EksctlCommand.executeComand(cmd).attempt.unsafeRunSync() match {
-      case Left(err) => scribe.error(s"Trouble Running\n", err); fail(err)
+      case Left(err) => scribe.error(s"Trouble Running\n", err); fail("Failed ksctl cmd", err)
       case Right(rs) =>
         scribe.info(s"Std Error: ${rs.stderr}")
         scribe.info(s"Std Out: ${rs.stdout}")

@@ -1,8 +1,6 @@
 package com.odenzo.aws.lambda
 
-import cats._
-import cats.data._
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
 import cats.syntax.all._
 import com.odenzo.aws.{AWSUtils, OTag, OTags}
 import com.odenzo.utils.{FS2Utils, IOU}
@@ -28,9 +26,7 @@ object Lambda {
     * Then we can potentially update code / environment / layer reference.
     * Have to be careful the lambda function doesn't just take the latest all the time I guess.
     */
-  def publishLambdaLayer(layerName: String, desc: String, bucket: String, key: String)(
-      implicit cs: ContextShift[IO]
-  ): IO[PublishLayerVersionResponse] =
+  def publishLambdaLayer(layerName: String, desc: String, bucket: String, key: String): IO[PublishLayerVersionResponse] =
     IO(scribe.info(s"Publishing new Lambda Layer: $layerName - $key")) *> IOU.toIO {
       client.publishLayerVersion(
         PublishLayerVersionRequest.builder
@@ -47,12 +43,12 @@ object Lambda {
       )
     }
 
-  def getLayer(arn: String)(implicit cs: ContextShift[IO]): IO[GetLayerVersionByArnResponse] = {
+  def getLayer(arn: String): IO[GetLayerVersionByArnResponse] = {
     IOU.toIO(client.getLayerVersionByArn(GetLayerVersionByArnRequest.builder().arn(arn).build()))
   }
 
   /** @return a list of LayerItems with the most recent versions of each layer */
-  def listLayers()(implicit cs: ContextShift[IO]): IO[List[LayersListItem]] = {
+  def listLayers(): IO[List[LayersListItem]] = {
     FS2Utils.toList(client.listLayersPaginator().layers())
   }
 
@@ -60,25 +56,24 @@ object Lambda {
     * FIXME: Broken Wants Layer Version ARN. But no use now...
     */
   @deprecated("Needs Fixing", since = "0.0.1")
-  def listLayerDetailsByName(name: String)(implicit cs: ContextShift[IO]): IO[Option[GetLayerVersionByArnResponse]] = {
+  def listLayerDetailsByName(name: String): IO[Option[GetLayerVersionByArnResponse]] = {
     // Note: This gets the lastest "AWS" version version. I guess the idea of a layer is all functions use the same
 
     FS2Utils
       .toBurstStream(client.listLayersPaginator())(rs => AWSUtils.fromJList(rs.layers()))
-      .flatMap(
-        stream =>
-          stream
-            .filter(_.layerName().equals(name))
-            .evalMap(li => getLayer(li.layerArn()))
-            .compile
-            .toList
+      .flatMap(stream =>
+        stream
+          .filter(_.layerName().equals(name))
+          .evalMap(li => getLayer(li.layerArn()))
+          .compile
+          .toList
       ) >>= IOU.optionOne(s"Lambda Laster $name")
   }
 
   /** FS2 Stream of versions for a layer */
-  def listAllLayerVersions(name: String)(implicit cs: ContextShift[IO]): IO[fs2.Stream[IO, LayerVersionsListItem]] = {
-    FS2Utils.toBurstStream(client.listLayerVersionsPaginator(ListLayerVersionsRequest.builder().layerName(name).build()))(
-      rs => AWSUtils.fromJList(rs.layerVersions)
+  def listAllLayerVersions(name: String): IO[fs2.Stream[IO, LayerVersionsListItem]] = {
+    FS2Utils.toBurstStream(client.listLayerVersionsPaginator(ListLayerVersionsRequest.builder().layerName(name).build()))(rs =>
+      AWSUtils.fromJList(rs.layerVersions)
     )
   }
 
@@ -88,7 +83,7 @@ object Lambda {
 //  }
 
   /** Deletes all the versions of the names layer (if any exist). Deletes the layer doesn't dissaociate */
-  def deleteLayerIffExists(layerName: String)(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def deleteLayerIffExists(layerName: String): IO[Unit] = {
     for {
       _            <- IO(scribe.debug(s"Deleting Layer if Exists [$layerName]"))
       layersStream <- listAllLayerVersions(layerName)
@@ -97,17 +92,17 @@ object Lambda {
   }
 
   /** Layer or whatedver */
-  def putResourceTags(arn: String, tags: OTags)(implicit cs: ContextShift[IO]): IO[TagResourceResponse] = {
+  def putResourceTags(arn: String, tags: OTags): IO[TagResourceResponse] = {
     IOU.toIO(client.tagResource(TagResourceRequest.builder.resource(arn).tags(tags.tags.asJava).build()))
   }
 
-  def getResourceTags(arn: String)(implicit cs: ContextShift[IO]): IO[OTags] = {
+  def getResourceTags(arn: String): IO[OTags] = {
     IOU
       .toIO(client.listTags(ListTagsRequest.builder().resource(arn).build()))
       .map(rs => if (rs.hasTags) OTags(rs.tags().asScala.toMap) else OTags.empty)
   }
 
-  def findLayersByNameAndTag(name: String, tag: OTag)(implicit cs: ContextShift[IO]): IO[List[(LayersListItem, OTags)]] = {
+  def findLayersByNameAndTag(name: String, tag: OTag): IO[List[(LayersListItem, OTags)]] = {
     for {
       all      <- listLayers()
       named     = all.filter(l => l.layerName == name)
@@ -116,7 +111,7 @@ object Lambda {
     } yield matching
   }
 
-  def findLayersByTag(tag: OTag)(implicit cs: ContextShift[IO]): IO[List[(LayersListItem, OTags)]] = {
+  def findLayersByTag(tag: OTag): IO[List[(LayersListItem, OTags)]] = {
     for {
       all      <- listLayers()
       withTags <- all.traverse(layer => getResourceTags(layer.layerArn).tupleLeft(layer))
@@ -124,10 +119,10 @@ object Lambda {
     } yield matching
   }
 
-  def deleteLayerVersion(layer: String, verNum: Long)(implicit cs: ContextShift[IO]): IO[Unit] =
+  def deleteLayerVersion(layer: String, verNum: Long): IO[Unit] =
     IOU.toIO(client.deleteLayerVersion(DeleteLayerVersionRequest.builder.layerName(layer).versionNumber(verNum).build)).void
 
-  def deleteFunctionIfExists(nameOrArn: String, version: Option[String])(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def deleteFunctionIfExists(nameOrArn: String, version: Option[String]): IO[Unit] = {
     for {
       found <- findFunction(nameOrArn, version)
       _     <- IO(scribe.info(s"Found ${found.size} functions matching $nameOrArn version $version to delete"))
@@ -135,22 +130,20 @@ object Lambda {
     } yield ()
   }
 
-  def deleteFunction(nameOrArn: String, version: Option[String])(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def deleteFunction(nameOrArn: String, version: Option[String]): IO[Unit] = {
     val base                              = DeleteFunctionRequest.builder.functionName(nameOrArn)
     val rq: DeleteFunctionRequest.Builder = version.fold(base)(v => base.qualifier(v))
     IOU.toIO(client.deleteFunction(rq.build())).void
   }
 
-  def createFunction(rq: CreateFunctionRequest)(implicit cs: ContextShift[IO]): IO[CreateFunctionResponse] =
+  def createFunction(rq: CreateFunctionRequest): IO[CreateFunctionResponse] =
     IOU.toIO(client.createFunction(rq))
 
   /** Config includes the environment and some other stuff. */
-  def updateFunctionConfig(
-      rq: UpdateFunctionConfigurationRequest
-  )(implicit cs: ContextShift[IO]): IO[UpdateFunctionConfigurationResponse] = {
+  def updateFunctionConfig(rq: UpdateFunctionConfigurationRequest): IO[UpdateFunctionConfigurationResponse] = {
     IOU.toIO(client.updateFunctionConfiguration(rq))
   }
-  def updateFunctionCode(rq: UpdateFunctionCodeRequest)(implicit cs: ContextShift[IO]): IO[UpdateFunctionCodeResponse] = {
+  def updateFunctionCode(rq: UpdateFunctionCodeRequest): IO[UpdateFunctionCodeResponse] = {
     IOU.toIO(client.updateFunctionCode(rq))
   }
 
@@ -161,7 +154,7 @@ object Lambda {
       .build()
 
   /** Not sure why this is so slow other than it is getting every version as an emit */
-  def listFunctions()(implicit cs: ContextShift[IO]): IO[fs2.Stream[IO, FunctionConfiguration]] = {
+  def listFunctions(): IO[fs2.Stream[IO, FunctionConfiguration]] = {
     FS2Utils.toBurstStream(
       client.listFunctionsPaginator(
         ListFunctionsRequest.builder
@@ -174,7 +167,7 @@ object Lambda {
   /** Finds function by name, if version suppled filters on that too (slowly) Not could have multople versions found
     * if version not specified
     */
-  def findFunction(fn: String, version: Option[String] = None)(implicit cs: ContextShift[IO]): IO[List[FunctionConfiguration]] = {
+  def findFunction(fn: String, version: Option[String] = None): IO[List[FunctionConfiguration]] = {
     listFunctions().flatMap { stream: fs2.Stream[IO, FunctionConfiguration] =>
       stream
         .filter(_.functionName() === fn)
@@ -184,11 +177,11 @@ object Lambda {
     }
   }
 
-  def findLatestFunction(fn: String)(implicit cs: ContextShift[IO]): IO[Option[FunctionConfiguration]] = {
+  def findLatestFunction(fn: String): IO[Option[FunctionConfiguration]] = {
     findFunction(fn, "$LATEST".some) >>= IOU.optionOne(s"$fn::LATEST")
   }
 
-  def listConcurrencyConfigs(fn: String)(implicit cs: ContextShift[IO]): IO[fs2.Stream[IO, ProvisionedConcurrencyConfigListItem]] = {
+  def listConcurrencyConfigs(fn: String): IO[fs2.Stream[IO, ProvisionedConcurrencyConfigListItem]] = {
     FS2Utils.toBurstStream(
       client.listProvisionedConcurrencyConfigsPaginator(
         ListProvisionedConcurrencyConfigsRequest.builder
@@ -199,18 +192,18 @@ object Lambda {
   }
 
   /** Creating an alias can re-home to different Lambda Fn version, or even split between versions */
-  def createAlias(rq: CreateAliasRequest)(implicit cs: ContextShift[IO]): IO[CreateAliasResponse] = {
+  def createAlias(rq: CreateAliasRequest): IO[CreateAliasResponse] = {
     IOU.toIO(client.createAlias(rq))
   }
 
   /** Not sure how to do this, as update alias just updates KMS key for an alias
     * do we have to delete and create? That seems wacked.
     */
-  def updateAlias(rq: UpdateAliasRequest)(implicit cs: ContextShift[IO]): IO[UpdateAliasResponse] = {
+  def updateAlias(rq: UpdateAliasRequest): IO[UpdateAliasResponse] = {
     IOU.toIO(client.updateAlias(rq))
   }
 
-  def getAlias(aliasName: String)(implicit cs: ContextShift[IO]): IO[GetAliasResponse] = {
+  def getAlias(aliasName: String): IO[GetAliasResponse] = {
     IOU.toIO(
       client.getAlias(
         GetAliasRequest.builder
@@ -221,7 +214,7 @@ object Lambda {
     )
   }
 
-  def updateAlias(aliasName: String, version: String)(implicit cs: ContextShift[IO]): IO[UpdateAliasResponse] = {
+  def updateAlias(aliasName: String, version: String): IO[UpdateAliasResponse] = {
 
     // Going to get the current alias to check its revision and add 1
     // Also, if missing values get erased then populate from old alias
@@ -236,19 +229,17 @@ object Lambda {
       )
     }
   }
-  def listAliases(fn: String)(implicit cs: ContextShift[IO]): IO[fs2.Stream[IO, AliasConfiguration]] = {
+  def listAliases(fn: String): IO[fs2.Stream[IO, AliasConfiguration]] = {
     FS2Utils.toBurstStream(client.listAliasesPaginator(ListAliasesRequest.builder.functionName(fn).build()))(_.aliases().asScala)
   }
 
-  def updateConfiguration(rq: UpdateFunctionConfigurationRequest)(implicit cs: ContextShift[IO]): IO[UpdateFunctionConfigurationResponse] =
+  def updateConfiguration(rq: UpdateFunctionConfigurationRequest): IO[UpdateFunctionConfigurationResponse] =
     IOU.toIO(client.updateFunctionConfiguration(rq))
 
   /** https://console.aws.amazon.com/lambda/home?region=us-east-1#/functions/CmsConverter?tab=permissions
     * We actually want to apply this to the BASE function
     */
-  def addS3LambdaResourcePermission(fnName: String, version: String, bucketArn: String)(
-      implicit cs: ContextShift[IO]
-  ): IO[AddPermissionResponse] = {
+  def addS3LambdaResourcePermission(fnName: String, version: String, bucketArn: String): IO[AddPermissionResponse] = {
     IO(scribe.debug(s"Adding Reource Permissions for $fnName Version $version -> $bucketArn")) *>
       IOU.toIO {
         client.addPermission(
@@ -264,9 +255,7 @@ object Lambda {
       }
   }
 
-  def addApiGatewayLambdaResourcePermission(fnName: String, version: String, sourceArn: String)(
-      implicit cs: ContextShift[IO]
-  ): IO[AddPermissionResponse] = {
+  def addApiGatewayLambdaResourcePermission(fnName: String, version: String, sourceArn: String): IO[AddPermissionResponse] = {
     IO(scribe.debug(s"Adding APIGateway Lambda Permission $fnName  -> $sourceArn")) *>
       IOU.toIO {
         client.addPermission(
@@ -281,9 +270,7 @@ object Lambda {
       }
   }
 
-  def addSNSLambdaResourcePermission(fnName: String, sourceArn: String)(
-    implicit cs: ContextShift[IO]
-  ): IO[AddPermissionResponse] = {
+  def addSNSLambdaResourcePermission(fnName: String, sourceArn: String): IO[AddPermissionResponse] = {
     IO(scribe.debug(s"Adding SNS Lambda Permission $fnName  -> $sourceArn")) *>
       IOU.toIO {
         client.addPermission(
@@ -291,7 +278,7 @@ object Lambda {
             .statementId("sns-account") // Aka Sid
             .principal("sns.amazonaws.com")
             .action("lambda:InvokeFunction")
-            .functionName(fnName)      // Converted to ARN under Resource: field
+            .functionName(fnName)       // Converted to ARN under Resource: field
             .sourceArn(sourceArn)
             .build()
         )
@@ -301,7 +288,7 @@ object Lambda {
   /** Publishes iff changed to config or function. Seems AWS takes care of version name
     * Please put the underlying code semantic version in description
     */
-  def publish(fnName: String, desc: String)(implicit cs: ContextShift[IO]): IO[PublishVersionResponse] = {
+  def publish(fnName: String, desc: String): IO[PublishVersionResponse] = {
     IOU.toIO(
       client.publishVersion(
         PublishVersionRequest
@@ -316,9 +303,7 @@ object Lambda {
   }
 
   /** Note: Can't delete function that is bound to an alias */
-  def createAlias(alias: String, fnName: String, fnVersion: String, codeVersion: String)(
-      implicit cs: ContextShift[IO]
-  ): IO[CreateAliasResponse] = {
+  def createAlias(alias: String, fnName: String, fnVersion: String, codeVersion: String): IO[CreateAliasResponse] = {
     val rq = CreateAliasRequest
       .builder()
       .description(s"Image Resizer Alias for Code $codeVersion")

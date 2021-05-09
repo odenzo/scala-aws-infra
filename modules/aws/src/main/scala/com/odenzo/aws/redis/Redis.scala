@@ -1,8 +1,6 @@
 package com.odenzo.aws.redis
 
-import cats._
-import cats.data._
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
 import cats.syntax.all._
 import com.odenzo.aws.rds.RDS.findCluster
 import com.odenzo.aws.{AWSUtils, AwsErrorUtils, OTags}
@@ -37,7 +35,7 @@ object Redis extends AWSUtils with AwsErrorUtils {
   // I guess the SOR is the set of ss-servers and they are essentially cache-ing stuff they scrape from there.
   // Anyway, you can add more nodes as needed.
   // I think just the node type is fixed.
-  def create(conf: RedisConfig)(implicit cs: ContextShift[IO]): IO[CacheCluster] = {
+  def create(conf: RedisConfig): IO[CacheCluster] = {
     // We will make a real Redis setup now.
     val rq = CreateCacheClusterRequest.builder
       .azMode(AZMode.SINGLE_AZ)                       // No cross-zone redundancy
@@ -58,13 +56,13 @@ object Redis extends AWSUtils with AwsErrorUtils {
     IOU.toIO(client.createCacheCluster(rq)).map(_.cacheCluster)
   }
 
-  def deleteRedis(cacheCluster: CacheCluster)(implicit cs: ContextShift[IO]): IO[CacheCluster] = {
+  def deleteRedis(cacheCluster: CacheCluster): IO[CacheCluster] = {
     completableFutureToIO(
       client.deleteCacheCluster(DeleteCacheClusterRequest.builder.cacheClusterId(cacheCluster.cacheClusterId()).build())
     ).map(_.cacheCluster)
   }
 
-  def listReplicationGroups()(implicit cs: ContextShift[IO]): IO[Stream[IO, ReplicationGroup]] = {
+  def listReplicationGroups(): IO[Stream[IO, ReplicationGroup]] = {
     for {
       stream <- FS2Utils.toStream(client.describeReplicationGroupsPaginator())
       content = stream.map(_.replicationGroups().asScala.toList)
@@ -72,7 +70,7 @@ object Redis extends AWSUtils with AwsErrorUtils {
     } yield burst
   }
 
-  def listClusterCaches()(implicit cs: ContextShift[IO]): IO[Stream[IO, CacheCluster]] = {
+  def listClusterCaches(): IO[Stream[IO, CacheCluster]] = {
     val rq = DescribeCacheClustersRequest.builder
       .showCacheNodeInfo(true)
       .showCacheClustersNotInReplicationGroups(true)
@@ -86,9 +84,7 @@ object Redis extends AWSUtils with AwsErrorUtils {
   }
 
   /** This is only needed if Redis is outside the VPC? */
-  def authorizeSecurityGroup(cacheSecurityGroupName: String, sgName: String, ownerAccount: String)(
-      implicit cs: ContextShift[IO]
-  ): IO[CacheSecurityGroup] = {
+  def authorizeSecurityGroup(cacheSecurityGroupName: String, sgName: String, ownerAccount: String): IO[CacheSecurityGroup] = {
     IO(scribe.info(s"Authorign Security Group for Redis $sgName")) *>
       IOU
         .toIO(
@@ -103,14 +99,14 @@ object Redis extends AWSUtils with AwsErrorUtils {
         .map(_.cacheSecurityGroup)
   }
 
-  def findClusterByName(name: String)(implicit cs: ContextShift[IO]): IO[Option[CacheCluster]] = {
+  def findClusterByName(name: String): IO[Option[CacheCluster]] = {
     listClusterCaches().flatMap { stream =>
       stream.filter(cc => cc.cacheClusterId.equals(name)).compile.last
     }
   }
 
   /** Not used or tested yet */
-  def setNumberOfReplicas(count: Int)(implicit cs: ContextShift[IO]): IO[ReplicationGroup] = {
+  def setNumberOfReplicas(count: Int): IO[ReplicationGroup] = {
     completableFutureToIO {
       client.increaseReplicaCount(
         IncreaseReplicaCountRequest.builder
@@ -123,13 +119,13 @@ object Redis extends AWSUtils with AwsErrorUtils {
   }
 
   /** IF resource doesn't exist return None, else a possible empty list of tags */
-  def findTagsForCacheCluster(arn: String)(implicit cs: ContextShift[IO]): IO[Option[List[Tag]]] = {
+  def findTagsForCacheCluster(arn: String): IO[Option[List[Tag]]] = {
     IOU
       .toIO(client.listTagsForResource(ListTagsForResourceRequest.builder.resourceName(arn).build()))
       .redeem(AwsErrorUtils.nestedRecoverToOption[CacheClusterNotFoundException], rs => rs.tagList().asScala.toList.some)
   }
 
-  def listSubnetGroups()(implicit cs: ContextShift[IO]): IO[Stream[IO, CacheSubnetGroup]] = {
+  def listSubnetGroups(): IO[Stream[IO, CacheSubnetGroup]] = {
     for {
       stream <- FS2Utils.toStream(client.describeCacheSubnetGroupsPaginator())
       content = stream.map(_.cacheSubnetGroups().asScala.toList)
@@ -137,7 +133,7 @@ object Redis extends AWSUtils with AwsErrorUtils {
     } yield burst
   }
 
-  def findSubnetGroupByName(name: String)(implicit cs: ContextShift[IO]): IO[Option[CacheSubnetGroup]] = {
+  def findSubnetGroupByName(name: String): IO[Option[CacheSubnetGroup]] = {
     for {
       stream   <- listSubnetGroups()
       filtered  = stream.filter(_.cacheSubnetGroupName().equals(name))
@@ -145,7 +141,7 @@ object Redis extends AWSUtils with AwsErrorUtils {
     } yield optional
   }
 
-  def createCacheSubnetGroup(subnetIds: List[String], name: String, desc: String)(implicit cs: ContextShift[IO]): IO[CacheSubnetGroup] = {
+  def createCacheSubnetGroup(subnetIds: List[String], name: String, desc: String): IO[CacheSubnetGroup] = {
     IOU
       .toIO(
         client.createCacheSubnetGroup(
@@ -159,7 +155,7 @@ object Redis extends AWSUtils with AwsErrorUtils {
       .map(_.cacheSubnetGroup())
   }
 
-  def getEndpointsByName(name: String)(implicit cs: ContextShift[IO]): IO[List[Endpoint]] = {
+  def getEndpointsByName(name: String): IO[List[Endpoint]] = {
     for {
       redis    <- findClusterByName(name) >>= IOU.required(s"Redis Named $name")
       endpoints = redis.cacheNodes().asScala.map(cnode => cnode.endpoint()).toList
@@ -167,18 +163,18 @@ object Redis extends AWSUtils with AwsErrorUtils {
   }
 
   /** Assumes deleting is constant, may go into backup though? */
-  def waitUntilDeleted(db: CacheCluster)(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def waitUntilDeleted(db: CacheCluster): IO[Unit] = {
     def cond(oc: Option[CacheCluster]): Boolean = oc.exists(v => v.cacheClusterStatus != "deleted")
     AWSUtils.pollWhile(cond)(findClusterByName(db.cacheClusterId())).void // Fing error on not there
   }
 
   /** Assumes deleting is constant, may go into backup though? */
-  def waitUntilReady(db: CacheCluster)(implicit cs: ContextShift[IO]): IO[DBCluster] = {
+  def waitUntilReady(db: CacheCluster): IO[DBCluster] = {
     def loopWhile(s: DBCluster) = s.status.equals("deleting")
     AWSUtils.pollWhile(loopWhile)(findCluster(db.cacheClusterId) >>= IOU.required(s"$db"))
   }
 
-  def deleteRedisSubnetGroup(subnetGroupName: String)(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def deleteRedisSubnetGroup(subnetGroupName: String): IO[Unit] = {
     findSubnetGroupByName(subnetGroupName).flatMap {
       case None    => IO(scribe.info(s"No Cache Subnet Group $subnetGroupName"))
       case Some(_) =>

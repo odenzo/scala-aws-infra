@@ -1,8 +1,7 @@
 package com.odenzo.aws.kafka
 
-import cats._
 import cats.data._
-import cats.effect.{ContextShift, IO, Timer}
+import cats.effect.IO
 import cats.syntax.all._
 import com.odenzo.aws.{AWSUtils, OTags}
 import com.odenzo.utils.OPrint.oprint
@@ -14,6 +13,7 @@ import software.amazon.awssdk.services.kafka.model._
 
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
+import scala.language.postfixOps
 
 object Kafka {
   lazy private val client: KafkaAsyncClient = KafkaAsyncClient.builder().build()
@@ -22,8 +22,7 @@ object Kafka {
   // Actually, now only ss-controller use Redis, and they can be configured to use their own cache.
   // I guess the SOR is the set of ss-servers and they are essentially cache-ing stuff they scrape from there.
 
-  /**
-    *  Partial configuratin for a Kafka cluster, some stuff hard coded too.
+  /**  Partial configuratin for a Kafka cluster, some stuff hard coded too.
     * @param name Cluster Name, verbatim
     * @param instanceType Machine type, e.g. kafka-m4-large
     * @param clientSubnets  Subnets to allow Kafka, note 2.4.1 rackspace to read from closest.
@@ -110,12 +109,12 @@ object Kafka {
   /** Creates a cluster returning its name and ARN.
     * We then call get Cluster description to normaize usually
     */
-  def createCluster(rq: CreateClusterRequest)(implicit cs: ContextShift[IO]): IO[CreateClusterResponse] = {
+  def createCluster(rq: CreateClusterRequest): IO[CreateClusterResponse] = {
     IOU.toIO(client.createCluster(rq))
   }
 
   /** Takes a long while to actually delete */
-  def deleteCluster(kafka: ClusterInfo)(implicit cs: ContextShift[IO]): IO[ClusterState] = {
+  def deleteCluster(kafka: ClusterInfo): IO[ClusterState] = {
     IOU
       .toIO(client.deleteCluster(DeleteClusterRequest.builder.clusterArn(kafka.clusterArn).build()))
       .map(_.state)
@@ -125,7 +124,7 @@ object Kafka {
     * Now if failed I raise custom error with code and message.
     * This is mainly for looping to see when its done.
     */
-  def checkClusterReady(kafkaArn: String)(implicit cs: ContextShift[IO]): IO[ClusterState] = {
+  def checkClusterReady(kafkaArn: String): IO[ClusterState] = {
     describeCluster(kafkaArn)
       .map { ci =>
         scribe.debug(s"Cluster State: ${ci.state()}")
@@ -144,14 +143,14 @@ object Kafka {
     * it will keep checking, else return error if FAILED or DELETING or exceptional case
     * (e.g. Kafka instance not found by ARN)
     */
-  def waitUntilClusterReady(kafkaArn: String)(implicit cs: ContextShift[IO], timer: Timer[IO]): IO[ClusterState] = {
+  def waitUntilClusterReady(kafkaArn: String): IO[ClusterState] = {
     FS2Utils.uniformRetry(1 minute, 60)(checkClusterReady(kafkaArn))
   }
 
   /** Assumes deleting is constant, may go into backup though. Well, interesting thing
     * is if goes into ClusterState.FAILED instead not handled.
     */
-  def waitUntilDeleted(clusterName: String)(implicit cs: ContextShift[IO]) = {
+  def waitUntilDeleted(clusterName: String) = {
     def deletedComplete(st: Option[ClusterState]) =
       st match {
         case None                        => true
@@ -168,14 +167,14 @@ object Kafka {
   /** Can use this or just filter throgh listClusters, think same info.
     * This is better for looping to get building complete state etc.
     */
-  def describeCluster(clusterArn: String)(implicit cs: ContextShift[IO]): IO[ClusterInfo] = {
+  def describeCluster(clusterArn: String): IO[ClusterInfo] = {
     IOU
       .toIO(client.describeCluster(DescribeClusterRequest.builder().clusterArn(clusterArn).build()))
       .map(_.clusterInfo())
   }
 
   /** Return a fs2 of unfiltered Kafka clusters */
-  def listClusters()(implicit cs: ContextShift[IO]): IO[Stream[IO, ClusterInfo]] = {
+  def listClusters(): IO[Stream[IO, ClusterInfo]] = {
     for {
       stream <- FS2Utils.toStream(client.listClustersPaginator())
       content = stream.map(_.clusterInfoList().asScala.toList)
@@ -183,7 +182,7 @@ object Kafka {
     } yield burst
   }
 
-  def findCluster(clusterName: String)(implicit cs: ContextShift[IO]): IO[Option[ClusterInfo]] = {
+  def findCluster(clusterName: String): IO[Option[ClusterInfo]] = {
     for {
       clusterStream <- listClusters()
       cluster       <- clusterStream.filter(_.clusterName.equals(clusterName)).compile.last
@@ -191,13 +190,13 @@ object Kafka {
     } yield cluster
   }
 
-  def getBootstrapBrokers(clusterArn: String)(implicit cs: ContextShift[IO]): IO[GetBootstrapBrokersResponse] = {
+  def getBootstrapBrokers(clusterArn: String): IO[GetBootstrapBrokersResponse] = {
     IOU.toIO {
       client.getBootstrapBrokers(GetBootstrapBrokersRequest.builder().clusterArn(clusterArn).build)
     }
   }
 
-  def getZookeepers(clusterArn: String)(implicit cs: ContextShift[IO]): IO[String] = {
+  def getZookeepers(clusterArn: String): IO[String] = {
     describeCluster(clusterArn).map(_.zookeeperConnectString())
 
   }

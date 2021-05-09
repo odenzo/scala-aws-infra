@@ -1,6 +1,6 @@
 package com.odenzo.aws.route53
 
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
 import com.odenzo.aws.OTags
 import com.odenzo.utils.{FS2Utils, IOU}
 import software.amazon.awssdk.regions.Region
@@ -19,7 +19,7 @@ object Route53 {
   private val r53Client: Route53AsyncClient               = Route53AsyncClient.builder.region(Region.AWS_GLOBAL).build()
 
   /** There are no filters on list domains..mmm.. */
-  def listDomains()(implicit cs: ContextShift[IO]): IO[fs2.Stream[IO, DomainSummary]] = {
+  def listDomains(): IO[fs2.Stream[IO, DomainSummary]] = {
     for {
       stream <- FS2Utils.toStream(r53Domainsclient.listDomainsPaginator())
       content = stream.map(r => r.domains().asScala.toList)
@@ -27,14 +27,14 @@ object Route53 {
     } yield burst
   }
 
-  def listHostedZones()(implicit cs: ContextShift[IO]): IO[fs2.Stream[IO, HostedZone]] = {
+  def listHostedZones(): IO[fs2.Stream[IO, HostedZone]] = {
     FS2Utils.toStream(r53Client.listHostedZonesPaginator()).map { stream =>
       stream.map(_.hostedZones().asScala.toList).flatMap(fs2.Stream.emits)
     }
   }
 
   /** This works and creates right away, indempotent */
-  def makeCName(zoneId: String, cnameKey: String, cnameVal: String)(implicit cs: ContextShift[IO]): IO[ChangeResourceRecordSetsResponse] = {
+  def makeCName(zoneId: String, cnameKey: String, cnameVal: String): IO[ChangeResourceRecordSetsResponse] = {
     val change = Change.builder
       .action(ChangeAction.UPSERT)
       .resourceRecordSet(
@@ -62,7 +62,7 @@ object Route53 {
 
   }
 
-  def tagRecordSet(id: String, tags: OTags)(implicit cs: ContextShift[IO]): IO[ChangeTagsForResourceResponse] = {
+  def tagRecordSet(id: String, tags: OTags): IO[ChangeTagsForResourceResponse] = {
     IOU.toIO(
       r53Client.changeTagsForResource(
         ChangeTagsForResourceRequest.builder
@@ -73,7 +73,7 @@ object Route53 {
     )
   }
 
-  def listRecordSets(zoneId: String)(implicit cs: ContextShift[IO]): IO[fs2.Stream[IO, ResourceRecordSet]] = {
+  def listRecordSets(zoneId: String): IO[fs2.Stream[IO, ResourceRecordSet]] = {
     val rq = ListResourceRecordSetsRequest.builder.hostedZoneId(zoneId).build()
     FS2Utils.toStream(r53Client.listResourceRecordSetsPaginator(rq)).map { stream =>
       stream.map(_.resourceRecordSets().asScala.toList).flatMap(fs2.Stream.emits)

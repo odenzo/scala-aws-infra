@@ -9,6 +9,6 @@ class OTagsTest extends AWSBaseTest {
     val sec   = OTags.from("a" -> "Two")
     val con   = first.withTags(sec)
     scribe.debug(s"Con: ${con}")
-    con.tags.get("a") mustBe "Two"
+    assertEquals(con.tags.get("a"), Some("Two"))
   }
 }

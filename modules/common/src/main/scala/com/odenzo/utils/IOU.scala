@@ -2,16 +2,17 @@ package com.odenzo.utils
 
 import cats._
 import cats.data._
-import cats.effect.tracing.PrintingOptions
-import cats.effect.{ContextShift, IO, Timer}
+import cats.effect._
 import cats.syntax.all._
 
 import java.util.concurrent.{CompletableFuture, TimeUnit}
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
+
+/** Some utilities, these are for conrete IO type mostly, a few ApplicativeErrors */
 trait IOU {
 
-  def toIO[A](fn: => CompletableFuture[A])(implicit cs: ContextShift[IO]): IO[A] = {
+  def toIO[A](fn: => CompletableFuture[A]): IO[A] = {
     import scala.jdk.FutureConverters._
     val ff: IO[Future[A]] = IO.delay(fn.asScala)
     IO.fromFuture(ff) // Does IO.async under the hood.
@@ -20,7 +21,7 @@ trait IOU {
   /** Allows  toIO(Future.successful("a") or toIO(callReturningFuture(args))
     * such that the future is deflation because fn is call-by-name
     */
-  def fromFuture[A](fn: => Future[A])(implicit cs: ContextShift[IO]): IO[A] = {
+  def fromFuture[A](fn: => Future[A]): IO[A] = {
     IO.fromFuture(IO(fn))
   }
 
@@ -60,37 +61,30 @@ trait IOU {
 
   def wrapError[A](msg: String)(a: IO[A]): IO[A] = a.handleErrorWith(e => IO.raiseError(OError(msg, e)))
 
-  /** Be nice to have a macro do this for functions with auto message, new Cats Effect? */
-  def wrapAndTrace[A](msg: String)(fn: IO[A]): IO[A] = {
-    val traceOptions = PrintingOptions.Default
-      //.withShowFullStackTraces(true)
-      .withMaxStackTraceLines(20)
-
-    for {
-      _   <- IO(scribe.info(s"******  Starting $msg"))
-      res <- fn.handleErrorWith { e =>
-               IO.trace
-                 .map(trace => trace.showFiberTrace(traceOptions))
-                 .flatMap(d => IO(scribe.warn(d))) *> IO.raiseError(OError(msg, e))
-             }
-      _   <- IO(scribe.info(s"******  Finished $msg"))
-    } yield res
-  }
+//  /** Be nice to have a macro do this for functions with auto message, new Cats Effect? */
+//  def wrapAndTrace[F[_]: Monad, A](msg: String)(fn: F[A])(implicit F: Monad[F]): F[A] = {
+//    for {
+//      _    <- F.pure(scribe.info(s"******  Started $msg"))
+//      res  <- fn.handleErrorWith { e =>
+//                F.pure(scribe.warn(e)) *> cats.ApplicativeError[F, Throwable].raiseError(OError(msg, e))
+//              }
+//      done <- F.pure(scribe.info(s"******  Finished $msg"))
+//    } yield res
+//  }
 
   /** This executes fa once and then repeatadle executes fn until falses */
-  def pollWhile[T](fa: IO[T])(fn: Unit => Boolean)(implicit cs: ContextShift[IO]): IO[T] = {
-    implicit val timer: Timer[IO] = IO.timer(scala.concurrent.ExecutionContext.global)
-    val loopTime                  = FiniteDuration(3, TimeUnit.SECONDS)
+  def pollWhile[T](fa: IO[T])(fn: Unit => Boolean): IO[T] = {
+    val loopTime = FiniteDuration(3, TimeUnit.SECONDS)
     fa.flatMap { t: T => IO.sleep(loopTime).iterateUntil(fn) *> IO.pure(t) }
   }
 
-//  def pollWhileM[T](fa: IO[T])(fn: () => IO[Boolean])(implicit cs: ContextShift[IO]) = {
+//  def pollWhileM[T](fa: IO[T])(fn: () => IO[Boolean]) = {
 //    implicit val timer: Timer[IO] = IO.timer(scala.concurrent.ExecutionContext.global)
 //    val loopTime                  = FiniteDuration(3, TimeUnit.SECONDS)
 //    fa.flatMap { t: T => IO.iterateUntilM(IO.sleep(loopTime)).iterateUntilM(fn) *> IO.pure(t) }
 //  }
 
-//  def pollWhileA[T](fn: => IO[Boolean])(fa: IO[T])(implicit cs: ContextShift[IO]) = {
+//  def pollWhileA[T](fn: => IO[Boolean])(fa: IO[T]) = {
 //    val loopTime = FiniteDuration(3, TimeUnit.SECONDS)
 //
 //    def tryAgain(lastVal: T): IO[T] =

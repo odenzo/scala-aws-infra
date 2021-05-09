@@ -1,8 +1,6 @@
 package com.odenzo.aws.rds
 
-import cats._
-import cats.data._
-import cats.effect.{ContextShift, IO, Timer}
+import cats.effect.IO
 import cats.syntax.all._
 import com.odenzo.aws.OTags
 import com.odenzo.utils.OPrint.oprint
@@ -30,7 +28,7 @@ object RdsPostgres {
       subnetGroup: DBSubnetGroup,
       admin: LoginCreds,
       tags: OTags
-  )(implicit cs: ContextShift[IO]): IO[DBInstance] = {
+  ): IO[DBInstance] = {
     import scala.jdk.CollectionConverters._
 
     scribe.warn(s"Creating Postgres DB w/ master $admin    -- password can be reset via AWS Console")
@@ -43,7 +41,7 @@ object RdsPostgres {
     } yield db
   }
 
-  def createDb(rq: CreateDbInstanceRequest)(implicit cs: ContextShift[IO]): IO[DBInstance] = {
+  def createDb(rq: CreateDbInstanceRequest): IO[DBInstance] = {
     IOU.toIO(client.createDBInstance(rq)).map(_.dbInstance())
   }
 
@@ -95,7 +93,7 @@ object RdsPostgres {
   /** Cleans up but error checking and waiting is WIP except exceptions
     * Return is optional if the original is not found. Otherwise, may need to check on progress.
     */
-  def teardown(cluster: String)(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def teardown(cluster: String): IO[Unit] = {
     val instanceName = s"k8s-$cluster-instance"
     for {
 

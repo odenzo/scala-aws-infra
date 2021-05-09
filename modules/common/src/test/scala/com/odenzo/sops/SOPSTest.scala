@@ -1,15 +1,17 @@
 package com.odenzo.sops
 
-import cats.effect.IO
+import cats.effect.unsafe.IORuntime
 import com.odenzo.utils.OPrint.oprint
 import io.circe.Json
 import io.circe.literal.JsonStringContext
-import org.scalatest.funsuite.AnyFunSuite
+import munit.FunSuite
 
 import java.io.File
+import scala.concurrent.ExecutionContext
 
-class SOPSTest extends AnyFunSuite {
-
+class SOPSTest extends FunSuite {
+  val ex: ExecutionContext    = scala.concurrent.ExecutionContext.Implicits.global
+  implicit val IOR: IORuntime = IORuntime.global
   test("JSON Encrypt to File") {
     val json      = json"""{ "foo": "boo" }"""
     val encFile   = new File("/tmp/here.enc.json")

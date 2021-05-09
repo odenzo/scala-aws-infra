@@ -1,8 +1,6 @@
 package com.odenzo.aws.eks
 
-import cats._
-import cats.data.{Kleisli, _}
-import cats.effect.{ContextShift, IO, Timer}
+import cats.effect.IO
 import cats.syntax.all._
 import com.odenzo.aws.{AwsPEM, OTags}
 import com.odenzo.utils.{FS2Utils, IOU, RetryableError}
@@ -14,6 +12,7 @@ import java.util.UUID
 import java.util.concurrent.CompletionException
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
+import scala.language.postfixOps
 
 /** Facilities to create NodeGroups - specifically targetted for EKS Worker Node Groups
   * NOTE: THIS IS DEPRECATED ONCE NEW WAY WORKS AND WILL BE MOVED TO ATTIC or at least down to AWS
@@ -67,37 +66,36 @@ object NodeGroups {
       .scalingConfig(NodegroupScalingConfig.builder.desiredSize(desired).minSize(min).maxSize(max).build())
   }
 
-  def createNodeGroup(rq: CreateNodegroupRequest)(implicit cs: ContextShift[IO]) = {
+  def createNodeGroup(rq: CreateNodegroupRequest) = {
     scribe.info(s"Creating NodeGroup With ${rq}")
     IOU
       .toIO {
         EKS.client.createNodegroup(rq)
       }
-      .adaptErr {
-        case e: CompletionException =>
-          val cause = e.getCause
-          scribe.warn(s"""NodeGroup Creation Error ${e.getLocalizedMessage}
-                         | Details: ${cause}
-                         |""".stripMargin)
-          throw e
+      .adaptErr { case e: CompletionException =>
+        val cause = e.getCause
+        scribe.warn(s"""NodeGroup Creation Error ${e.getLocalizedMessage}
+                       | Details: ${cause}
+                       |""".stripMargin)
+        throw e
       }
   }
 
   /** Iniates the deletion of a NodeGroup -- returning the NodeGroup. It may take some time for it to be deleted. */
-  def deleteNodeGroup(cluster: String, nodegroup: String)(implicit cs: ContextShift[IO]) = {
+  def deleteNodeGroup(cluster: String, nodegroup: String) = {
     IOU
       .toIO(EKS.client.deleteNodegroup(DeleteNodegroupRequest.builder.clusterName(cluster).nodegroupName(nodegroup).build()))
       .map(_.nodegroup())
   }
 
-  def describeNodegroup(cluster: String, ng: String)(implicit cs: ContextShift[IO]) = {
+  def describeNodegroup(cluster: String, ng: String) = {
     IOU
       .toIO(EKS.client.describeNodegroup(DescribeNodegroupRequest.builder.clusterName(cluster).nodegroupName(ng).build()))
       .map(_.nodegroup())
   }
 
   /** State testing just for creation / updating */
-  def isCreated(clusterName: String, nodegroup: String)(implicit cs: ContextShift[IO]) = {
+  def isCreated(clusterName: String, nodegroup: String) = {
     for {
       ng <- describeNodegroup(clusterName, nodegroup)
       _   = scribe.info(s"EKS NodeGroupr $nodegroup State @ ${Instant.now} ${ng.status}")
@@ -117,7 +115,7 @@ object NodeGroups {
 
   }
 
-  def waitForNodegroupAvailable(cluster: String, nodegroup: String)(implicit cs: ContextShift[IO], timer: Timer[IO]) = {
+  def waitForNodegroupAvailable(cluster: String, nodegroup: String) = {
     FS2Utils.uniformRetry(30 seconds, 40)(isCreated(cluster, nodegroup))
   }
 }

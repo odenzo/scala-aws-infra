@@ -1,8 +1,6 @@
 package com.odenzo.aws.ec2
 
-import cats._
-import cats.data._
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
 import cats.syntax.all._
 import com.odenzo.aws.{CIDR, OTags}
 import com.odenzo.utils.OPrint.oprint
@@ -20,7 +18,7 @@ object Subnets {
   /** Create a subnet, without routing rules or Nat/IGW, returning subnet on success.
     * This call also doesn't assign a public IPv4 addresss, which is needed
     */
-  def createSubnet(vpc: Vpc, az: String, cidr: CidrBlock, otags: OTags)(implicit cs: ContextShift[IO]): IO[Subnet] = {
+  def createSubnet(vpc: Vpc, az: String, cidr: CidrBlock, otags: OTags): IO[Subnet] = {
     IOU
       .toIO(
         EC2.client.createSubnet(
@@ -36,7 +34,7 @@ object Subnets {
   }
 
   /** Mastwr Call  For a list of filter types see AWS Javadocs */
-  def describeSubnets(filters: Filter*)(implicit cs: ContextShift[IO]): IO[Stream[IO, Subnet]] = {
+  def describeSubnets(filters: Filter*): IO[Stream[IO, Subnet]] = {
     val withFilters = DescribeSubnetsRequest.builder.filters(filters.asJavaCollection).build()
     for {
       stream <- FS2Utils.toStream(EC2.client.describeSubnetsPaginator(withFilters))
@@ -46,25 +44,25 @@ object Subnets {
   }
 
   /** Master Call */
-  def listSubnets(filters: Filter*)(implicit cs: ContextShift[IO]): IO[List[Subnet]] =
+  def listSubnets(filters: Filter*): IO[List[Subnet]] =
     describeSubnets(filters: _*).flatMap(_.compile.toList).redeemWith(e => IO.raiseError(OError("list Subnet Streaming Error", e)), IO.pure)
 
-  def listSubnets(inVpc: Vpc)(implicit cs: ContextShift[IO]): IO[List[Subnet]] =
+  def listSubnets(inVpc: Vpc): IO[List[Subnet]] =
     listSubnets(EC2.filter("vpc-id", inVpc.vpcId()))
 
   /** Finds first subnet in VPC with CIDR. SHould be 0 or 1 always. Error on 0 */
-  def findSubnetByCidr(vpc: Vpc, cidr: CIDR)(implicit cs: ContextShift[IO]): IO[Option[Subnet]] =
+  def findSubnetByCidr(vpc: Vpc, cidr: CIDR): IO[Option[Subnet]] =
     listSubnets(EC2.vpcFilter(vpc), EC2.filter("cidr-block", cidr.toString)) >>=
       IOU.optionOne(s"Subnet w/ CIDR $cidr in ${vpc.vpcId()}")
 
-  def getSubnetByCidr(vpc: Vpc, cidr: String)(implicit cs: ContextShift[IO]): IO[Subnet] =
+  def getSubnetByCidr(vpc: Vpc, cidr: String): IO[Subnet] =
     CIDR.fromString(cidr).flatMap(findSubnetByCidr(vpc, _)) >>= IOU.required(s"Subnet $cidr")
 
-  def findSubnetsWithTag(vpc: Vpc, tag: (String, String))(implicit cs: ContextShift[IO]): IO[List[Subnet]] =
+  def findSubnetsWithTag(vpc: Vpc, tag: (String, String)): IO[List[Subnet]] =
     listSubnets(EC2.vpcFilter(vpc), EC2.tagFilter(tag._1, tag._2))
 
   /** Find subnets in VPC with Tag Name=`name`. */
-  def findSubnetWithName(vpc: Vpc, name: String)(implicit cs: ContextShift[IO]): IO[Option[Subnet]] = {
+  def findSubnetWithName(vpc: Vpc, name: String): IO[Option[Subnet]] = {
 
     (listSubnets(EC2.vpcFilter(vpc), EC2.tagFilter("Name", name)) >>= IOU.optionOne(s"Subnets named $name"))
       .flatTap { sn =>
@@ -72,17 +70,17 @@ object Subnets {
       }
   }
 
-  def getSubnetWithName(vpc: Vpc, name: String)(implicit cs: ContextShift[IO]): IO[Subnet] =
+  def getSubnetWithName(vpc: Vpc, name: String): IO[Subnet] =
     findSubnetWithName(vpc, name) >>= IOU.required(s"subnet named $name not found")
 
-  def findSubnetById(id: String)(implicit cs: ContextShift[IO]): IO[Option[Subnet]] =
+  def findSubnetById(id: String): IO[Option[Subnet]] =
     listSubnets(EC2.filter("subnet-id", id)) >>= IOU.optionOne(s"Subnet ID $id")
 
-  def findSubnetBySubnetId(vpc: Vpc, id: String)(implicit cs: ContextShift[IO]): IO[Option[Subnet]] =
+  def findSubnetBySubnetId(vpc: Vpc, id: String): IO[Option[Subnet]] =
     listSubnets(EC2.vpcFilter(vpc), EC2.filter("subnet-id", id)) >>= IOU.optionOne(s"Duplicate Subnets $id")
 
   /** Adds/replaces given tags on the subnet */
-  def tagSubnet(vpc: Vpc, cidr: CIDR, tags: OTags)(implicit cs: ContextShift[IO]): IO[Boolean] = {
+  def tagSubnet(vpc: Vpc, cidr: CIDR, tags: OTags): IO[Boolean] = {
     for {
       subnet <- findSubnetByCidr(vpc, cidr) >>= IOU.required(s"CIDR $cidr Subnet Not Found")
       rs     <- EC2.tagResource(subnet.subnetId, tags)
@@ -90,7 +88,7 @@ object Subnets {
   }
 
   /** Turns on/off the autoAssignIPv4 - nothing of interest returned */
-  def modifySubnetPublicIPv4(subnet: Subnet, autoAssignIPv4: Boolean)(implicit cs: ContextShift[IO]): IO[String] = {
+  def modifySubnetPublicIPv4(subnet: Subnet, autoAssignIPv4: Boolean): IO[String] = {
     IOU
       .toIO(
         EC2.client.modifySubnetAttribute(
@@ -104,7 +102,7 @@ object Subnets {
   }
 
   // Not sure if we will have to wait here
-  def deleteSubnet(sn: Subnet)(implicit cs: ContextShift[IO]): IO[Unit] =
+  def deleteSubnet(sn: Subnet): IO[Unit] =
     IO(scribe.debug(s"Deleting Subnet ${oprint(sn)}")) *>
       IOU.toIO(EC2.client.deleteSubnet(DeleteSubnetRequest.builder.subnetId(sn.subnetId).build())).void
 }

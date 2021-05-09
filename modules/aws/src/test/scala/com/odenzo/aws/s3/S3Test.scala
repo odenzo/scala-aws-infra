@@ -1,7 +1,5 @@
 package com.odenzo.aws.s3
 
-import cats._
-import cats.data._
 import cats.effect.IO
 import cats.syntax.all._
 import com.odenzo.aws.testutils.AWSBaseTest
@@ -32,10 +30,10 @@ class S3Test extends AWSBaseTest {
   }
   test("GET Website Config for Images ") {
     val prog = for {
-      foo    <- S3.getWebsiteServerConfig("odenzo-images")
-      _       <- IO(scribe.debug(s"HORN: ${oprint(foo)}"))
+      foo  <- S3.getWebsiteServerConfig("odenzo-images")
+      _    <- IO(scribe.debug(s"HORN: ${oprint(foo)}"))
       conf <- S3.getWebsiteServerConfig("horn-images-dev")
-      _       <- IO(scribe.debug(s"Dev: ${oprint(conf)}"))
+      _    <- IO(scribe.debug(s"Dev: ${oprint(conf)}"))
     } yield (foo, conf)
 
     prog.unsafeRunSync()

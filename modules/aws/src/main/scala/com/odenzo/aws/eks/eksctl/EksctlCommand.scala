@@ -1,7 +1,6 @@
 package com.odenzo.aws.eks.eksctl
 
-import cats._
-import cats.data.{NonEmptyList, _}
+import cats.data.NonEmptyList
 import cats.effect.IO
 import cats.syntax.all._
 import com.odenzo.aws.{CIDR, OTags}
@@ -77,8 +76,7 @@ object EksctlCommand {
       .add("--node-label", tagList) // K8s Labels
   }
 
-  /**
-    * @param zones    List of zones in region, us-east-1a, us-east-1b style
+  /** @param zones    List of zones in region, us-east-1a, us-east-1b style
     * @return
     */
   def withNewVPC(zones: List[String], vpcCidr: CIDR): Args = {

@@ -1,8 +1,6 @@
 package com.odenzo.aws.rds
 
-import cats._
-import cats.data._
-import cats.effect.{ContextShift, IO, Timer}
+import cats.effect.IO
 import com.odenzo.aws.OTags
 import com.odenzo.utils.{IOU, LoginCreds}
 import software.amazon.awssdk.services._
@@ -17,7 +15,7 @@ object AuroraPostgres {
   case class ScalingParams(min: Int = 2, max: Int = 32, autoPause: Boolean = true, pauseDelaySec: Int = 120)
 
   /** Deletes the DB cluster, but not the SubnetGroup or Security Groups */
-  def teardown(dbClusterName: String)(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def teardown(dbClusterName: String): IO[Unit] = {
     val req = DeleteDbClusterRequest.builder.dbClusterIdentifier(dbClusterName).skipFinalSnapshot(true).build()
     RDS.findCluster(dbClusterName).flatMap {
       case Some(db) =>
@@ -33,7 +31,7 @@ object AuroraPostgres {
       securityGroup: SecurityGroup,
       scalingParams: ScalingParams,
       tags: OTags
-  )(implicit cs: ContextShift[IO]): IO[DBCluster] = {
+  ): IO[DBCluster] = {
     val az                         = dbSubnetGroup.subnets().asScala.map(sn => sn.subnetAvailabilityZone().name()).toList.distinct
     val rq: CreateDbClusterRequest = rds.model.CreateDbClusterRequest
       .builder()

@@ -1,6 +1,6 @@
 package com.odenzo.aws.secretsmanager
 
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
 import com.odenzo.aws.OTags
 import com.odenzo.utils.{FS2Utils, IOU}
 import software.amazon.awssdk.services.secretsmanager.SecretsManagerAsyncClient
@@ -14,7 +14,7 @@ object SecretsManager {
 
   val toSecretsManagerTag: (String, String) => Tag = (k: String, v: String) => Tag.builder().key(k).value(v).build()
 
-  def getRandomPassword()(implicit cs: ContextShift[IO]): IO[String] =
+  def getRandomPassword(): IO[String] =
     IOU
       .toIO(
         client.getRandomPassword(
@@ -29,7 +29,7 @@ object SecretsManager {
       .map(_.randomPassword())
 
   /** Creates a the secret and returns the ARN */
-  def createSecret(name: String, secret: String, tags: OTags)(implicit cs: ContextShift[IO]): IO[String] = {
+  def createSecret(name: String, secret: String, tags: OTags): IO[String] = {
     IOU
       .toIO(
         client.createSecret(
@@ -44,12 +44,12 @@ object SecretsManager {
       .map(_.arn())
   }
 
-  def deleteSecret(nameOrArn: String)(implicit cs: ContextShift[IO]): IO[DeleteSecretResponse] = {
+  def deleteSecret(nameOrArn: String): IO[DeleteSecretResponse] = {
     IOU.toIO(client.deleteSecret(DeleteSecretRequest.builder().secretId(nameOrArn).build()))
   }
 
   /** All the secrets metadata, not including the actual secret */
-  def listSecrets()(implicit cs: ContextShift[IO]): IO[fs2.Stream[IO, SecretListEntry]] = {
+  def listSecrets(): IO[fs2.Stream[IO, SecretListEntry]] = {
     for {
       stream <- FS2Utils.toStream(client.listSecretsPaginator())
       burst   = stream.map(_.secretList().asScala.toList).flatMap(fs2.Stream.emits)
@@ -57,12 +57,12 @@ object SecretsManager {
   }
 
   /** Throws some error if not found at AWS layer */
-  def describeSecret(nameOrArn: String)(implicit cs: ContextShift[IO]): IO[DescribeSecretResponse] = {
+  def describeSecret(nameOrArn: String): IO[DescribeSecretResponse] = {
     IOU.toIO(client.describeSecret(DescribeSecretRequest.builder.secretId(nameOrArn).build()))
   }
 
   /** Gets the password, as a String not binary */
-  def getPassword(nameOrArn: String)(implicit cs: ContextShift[IO]) = {
+  def getPassword(nameOrArn: String) = {
     IOU
       .toIO(client.getSecretValue(GetSecretValueRequest.builder.secretId(nameOrArn).build()))
       .map(_.secretString())

@@ -1,5 +1,5 @@
 package com.odenzo.utils
-import cats.effect.{IO, Sync, SyncIO}
+import cats.effect.SyncIO
 
 /** DNS Names, this is actually a DNS Subdomain now.
   * Used alot in K8S, and have regular expression that must match.

@@ -1,7 +1,5 @@
 package com.odenzo.aws
 
-import cats._
-import cats.data._
 import cats.syntax.all._
 import io.circe.JsonObject
 import io.circe.syntax.EncoderOps
@@ -33,15 +31,15 @@ case class OTags(tags: Map[String, String]) {
   def withName(s: String): OTags              = OTags(this.tags.updated("Name", s))
   def modifyName(fn: String => String): OTags = withName(fn(this.tags.getOrElse("Name", "")))
   def contains(t: OTag): Boolean              = tags.get(t.name).exists(_ === t.content)
-  def getName: Option[String] = this.tags.get("Name")
+  def getName: Option[String]                 = this.tags.get("Name")
 
   /** Convertor to AWS subpackage tag type */
   def via[T](fn: (String, String) => T): util.Collection[T] = OTags.toPackageTags(this, fn)
 
   def makeKubernetesLabelSafe: OTags = {
     // Where or where are you? '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]'
-    val nt = this.tags.iterator.map {
-      case (k, v) => (k.replace('/', '-'), v)
+    val nt = this.tags.iterator.map { case (k, v) =>
+      (k.replace('/', '-'), v)
     }
     OTags(nt.toMap)
   }

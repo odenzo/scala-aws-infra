@@ -1,9 +1,6 @@
 package com.odenzo.aws.iam
 
-import cats._
-import cats.data._
 import cats.effect.IO
-import cats.syntax.all._
 import com.odenzo.aws.ScribeControl
 import com.odenzo.aws.eks.{ClusterServiceRole, NodeInstanceRole}
 import com.odenzo.aws.testutils.AWSBaseTest

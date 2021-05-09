@@ -1,6 +1,5 @@
 package com.odenzo.aws.ec2
 
-import cats._
 import cats.data._
 import cats.effect.{IO, Resource}
 import cats.syntax.all._

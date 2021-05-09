@@ -1,15 +1,14 @@
 package com.odenzo.utils
 
-import cats._
-import cats.data._
 import cats.effect.IO
 import cats.syntax.all._
 import com.odenzo.utils.CommandLine._
 
 import java.io.File
+import scala.concurrent.duration.Duration
 
 class CommandLineTest extends BaseTest {
-
+  override val munitTimeout: Duration = Duration(5, "s")
   test("Display of Command") {
     val cmd = Command(
       "ls",
@@ -33,7 +32,8 @@ class CommandLineTest extends BaseTest {
   }
 
   test("Error Code") {
-    assertThrows[java.io.IOException] {
+
+    intercept[java.io.IOException] {
       Executor.run(Command("/never/found")).unsafeRunSync()
     }
   }
@@ -41,9 +41,8 @@ class CommandLineTest extends BaseTest {
     val cl  = Command("cat", Args.empty.add("/never/found"))
     val res = Executor.run(cl).unsafeRunSync()
     scribe.debug(s"$res")
-    res.stdout mustBe empty
-    res.stderr mustBe defined
-    res.exitCode mustNot equal(0)
+    assert(clue(res.stdout).isEmpty)
+    assertEquals(res.exitCode, 0)
   }
 
 }

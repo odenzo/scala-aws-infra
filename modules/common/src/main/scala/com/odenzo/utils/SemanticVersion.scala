@@ -1,6 +1,4 @@
 package com.odenzo.utils
-import cats._
-import cats.data._
 import cats.syntax.all._
 
 import scala.util.matching.Regex

@@ -10,7 +10,7 @@ class SecurityGroupsTest extends AWSBaseTest {
     val vpcId                        = "vpc-0a74ce726c3026565"
     val vpc                          = VPC.getVpcById(vpcId).unsafeRunSync()
     scribe.info(s"VPC ${oprint(vpc)}")
-    vpcId mustBe vpc.vpcId()
+    assertEquals(vpc.vpcId(), vpcId)
     val found: Option[SecurityGroup] = SecurityGroups.findSecurityGroupByNameInVpc("k8s/installer-test/postgres", vpc).unsafeRunSync()
     scribe.info(s"Found: ${oprint(found)}")
   }

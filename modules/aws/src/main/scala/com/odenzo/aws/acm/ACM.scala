@@ -1,8 +1,6 @@
 package com.odenzo.aws.acm
 
-import cats._
-import cats.data._
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
 import cats.syntax.all._
 import com.odenzo.aws.{AWSUtils, OTags}
 import com.odenzo.utils.OPrint.oprint
@@ -20,7 +18,7 @@ object ACM extends AWSUtils {
 
   protected final val client = AcmAsyncClient.create()
 
-  def tagCertificate(arn: String, tags: OTags)(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def tagCertificate(arn: String, tags: OTags): IO[Unit] = {
     completableFutureToIO(
       client.addTagsToCertificate(
         AddTagsToCertificateRequest.builder
@@ -31,11 +29,10 @@ object ACM extends AWSUtils {
     ).void
   }
 
-  /**
-    * Creates a certificate and asks for DNS validation,
+  /** Creates a certificate and asks for DNS validation,
     * @param base Domain like foo.odenzo.com and will create certificate covering foo.horn.co and *.foo.horn.co
     */
-  def createWildcardCertificate(base: String)(implicit cs: ContextShift[IO]): IO[String] = {
+  def createWildcardCertificate(base: String): IO[String] = {
     completableFutureToIO(
       client.requestCertificate(
         RequestCertificateRequest.builder
@@ -49,7 +46,7 @@ object ACM extends AWSUtils {
       .map(_.certificateArn())
   }
 
-  def describeCertificates(filters: Filters)(implicit cs: ContextShift[IO]): IO[fs2.Stream[IO, CertificateSummary]] = {
+  def describeCertificates(filters: Filters): IO[fs2.Stream[IO, CertificateSummary]] = {
     for {
       stream <- FS2Utils.toStream(client.listCertificatesPaginator(ListCertificatesRequest.builder.includes(filters).build()))
       emitted = stream.map(rs => fromJList(rs.certificateSummaryList)).flatMap(fs2.Stream.emits)
@@ -57,42 +54,42 @@ object ACM extends AWSUtils {
   }
 
   /** Summary just has arn and domain name. */
-  def listCertificates()(implicit cs: ContextShift[IO]): IO[fs2.Stream[IO, CertificateSummary]] = {
+  def listCertificates(): IO[fs2.Stream[IO, CertificateSummary]] = {
     describeCertificates(Filters.builder().build())
   }
 
-  def waitForCertificateToBeDefined(arn: String)(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def waitForCertificateToBeDefined(arn: String): IO[Unit] = {
     checkUntil(findCertificate(arn))(_.isDefined)
   }
 
-  def findCertificate(arn: String)(implicit cs: ContextShift[IO]): IO[Option[CertificateDetail]] =
+  def findCertificate(arn: String): IO[Option[CertificateDetail]] =
     describeCertificate(arn).redeemWith(error => IO.raiseError(error), bind => { IO.pure(bind.some) })
 
   /** Error if certificate with given arn is not found. */
-  def describeCertificate(arn: String)(implicit cs: ContextShift[IO]): IO[CertificateDetail] = {
+  def describeCertificate(arn: String): IO[CertificateDetail] = {
     completableFutureToIO(client.describeCertificate(DescribeCertificateRequest.builder.certificateArn(arn).build()))
       .map(_.certificate())
   }
 
-  def deleteCertificate(arn: String)(implicit cs: ContextShift[IO]): IO[DeleteCertificateResponse] = {
+  def deleteCertificate(arn: String): IO[DeleteCertificateResponse] = {
     completableFutureToIO(client.deleteCertificate(DeleteCertificateRequest.builder.certificateArn(arn).build()))
   }
 
   /** k8s/clusterName is typical name. This filters via contain */
-  def listCertificatesWithDomain(domain: String)(implicit cs: ContextShift[IO]): IO[fs2.Stream[IO, CertificateSummary]] = {
+  def listCertificatesWithDomain(domain: String): IO[fs2.Stream[IO, CertificateSummary]] = {
     listCertificates().map { stream =>
       stream.filter(_.domainName().contains(domain))
     }
   }
 
   /** Because typically have very few certificates. REST Call cost basically N+1 where N is number of certificates */
-  def describeAllCertificates()(implicit cs: ContextShift[IO]): IO[fs2.Stream[IO, CertificateDetail]] = {
+  def describeAllCertificates(): IO[fs2.Stream[IO, CertificateDetail]] = {
     listCertificates().map { stream =>
       stream.parEvalMap(5)(summary => describeCertificate(summary.certificateArn))
     }
   }
 
-  def findTlsCertificateForDomain(domain: String)(implicit cs: ContextShift[IO]): IO[Option[CertificateDetail]] = {
+  def findTlsCertificateForDomain(domain: String): IO[Option[CertificateDetail]] = {
 
     val res: IO[List[CertificateDetail]] = describeAllCertificates().flatMap { stream =>
       stream
@@ -105,7 +102,7 @@ object ACM extends AWSUtils {
   }
 
   /** Has to be primary domain as listed in console -- for us always the x.y.z first, not *.x.y.z */
-  def deleteAllCertificatesForDomain(domain: String)(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def deleteAllCertificatesForDomain(domain: String): IO[Unit] = {
     listCertificatesWithDomain(domain).flatMap { stream =>
       stream
         .evalTap(c => IO(scribe.debug(s"Deleting Certificate ${oprint(c)}")))

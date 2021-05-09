@@ -1,9 +1,7 @@
 package com.odenzo.aws.ec2
 
-import cats._
 import cats.data._
-import cats.effect.syntax.all._
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
 import cats.syntax.all._
 import com.odenzo.aws.{AWSUtils, AwsErrorUtils, OTag}
 import com.odenzo.utils.OPrint.oprint
@@ -17,8 +15,12 @@ object SecurityGroups extends AwsErrorUtils with AWSUtils {
   /** Creates a security group if doesn't exist, then ensures the given inbound and outbound rules are there. Won't remove old rules,
     * better to delete security group to do that.
     */
-  def constructSecurityGroupIfNeeded(name: String, desc: String, vpc: Vpc, inbound: List[IpPermission], outbound: List[IpPermission])(
-      implicit cs: ContextShift[IO]
+  def constructSecurityGroupIfNeeded(
+      name: String,
+      desc: String,
+      vpc: Vpc,
+      inbound: List[IpPermission],
+      outbound: List[IpPermission]
   ): IO[SecurityGroup] = {
 
     val inboundRules  = inbound.flatMap(in => in.ipRanges().asScala.map(_.description()))
@@ -38,7 +40,7 @@ object SecurityGroups extends AwsErrorUtils with AWSUtils {
   }
 
   /** Creates the security group returning the security group id on success. No rules are added */
-  def createSecurityGroup(name: String, desc: String, vpc: Vpc)(implicit cs: ContextShift[IO]): IO[SecurityGroup] = {
+  def createSecurityGroup(name: String, desc: String, vpc: Vpc): IO[SecurityGroup] = {
     IO(scribe.info(s"Creating Security Group $name")) *>
       completableFutureToIO(
         EC2.client.createSecurityGroup(
@@ -51,7 +53,7 @@ object SecurityGroups extends AwsErrorUtils with AWSUtils {
       ).flatMap(rs => getSecurityGroupById(rs.groupId))
   }
 
-  def getOrCreateSecurityGroup(name: String, desc: String, vpc: Vpc)(implicit cs: ContextShift[IO]): IO[SecurityGroup] = {
+  def getOrCreateSecurityGroup(name: String, desc: String, vpc: Vpc): IO[SecurityGroup] = {
     findSecurityGroupByNameInVpc(name, vpc).flatMap {
       case Some(sg) => IO(scribe.info(s"Using Existing Security Group ${oprint(sg)}")) *> IO.pure(sg)
       case None     => createSecurityGroup(name, desc, vpc)
@@ -59,46 +61,46 @@ object SecurityGroups extends AwsErrorUtils with AWSUtils {
   }
 
   /** Master finder that others delegate too. */
-  def listSecurityGroups(filters: Filter*)(implicit cs: ContextShift[IO]): IO[fs2.Stream[IO, SecurityGroup]] = {
+  def listSecurityGroups(filters: Filter*): IO[fs2.Stream[IO, SecurityGroup]] = {
     FS2Utils.toBurstStream(
       EC2.client.describeSecurityGroupsPaginator(DescribeSecurityGroupsRequest.builder.filters(filters.asJavaCollection).build())
     )(_.securityGroups.asScala)
   }
 
-  def findSecurityGroupById(groupId: String)(implicit cs: ContextShift[IO]): IO[Option[SecurityGroup]] = {
+  def findSecurityGroupById(groupId: String): IO[Option[SecurityGroup]] = {
     completableFutureToIO(EC2.client.describeSecurityGroups(DescribeSecurityGroupsRequest.builder.groupIds(groupId).build()))
       .map(r => fromJList(r.securityGroups))
       .flatMap(IOU.optionOne(s"SG ID $groupId"))
   }
 
-  def getSecurityGroupById(groupId: String)(implicit cs: ContextShift[IO]): IO[SecurityGroup] = {
+  def getSecurityGroupById(groupId: String): IO[SecurityGroup] = {
     findSecurityGroupById(groupId) >>= IOU.required(s"SG $groupId")
   }
 
   /** Lots of security groups so don't want to stream the whole lot. Need to capture EC2 exception */
-  def findSecurityGroupByNameInVpc(groupName: String, inVpc: Vpc)(implicit cs: ContextShift[IO]): IO[Option[SecurityGroup]] = {
+  def findSecurityGroupByNameInVpc(groupName: String, inVpc: Vpc): IO[Option[SecurityGroup]] = {
     listSecurityGroups(EC2.filter("group-name", groupName), EC2.filter("vpc-id", inVpc.vpcId))
       .flatMap(_.compile.toList)
       .flatMap(l => IOU.optionOne(s"SG $groupName in ${inVpc.vpcId}")(l))
   }
 
-  def listSecurityGroupsWithTag(vpc: Vpc, tag: OTag)(implicit cs: ContextShift[IO]): IO[List[SecurityGroup]] = {
+  def listSecurityGroupsWithTag(vpc: Vpc, tag: OTag): IO[List[SecurityGroup]] = {
     listSecurityGroups(EC2.tagFilter(tag), EC2.vpcFilter(vpc)).flatMap(_.compile.toList)
   }
 
-  def deleteSecurityGroupByNameIffExist(name: String, vpc: Vpc)(implicit cs: ContextShift[IO]): IO[Option[Unit]] = {
+  def deleteSecurityGroupByNameIffExist(name: String, vpc: Vpc): IO[Option[Unit]] = {
     SecurityGroups.findSecurityGroupByNameInVpc(name, vpc) >>= IOU.whenDefined { sg =>
       SecurityGroups.deleteSecurityGroup(sg)
     }
   }
 
-  def deleteSecurityGroup(sg: SecurityGroup)(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def deleteSecurityGroup(sg: SecurityGroup): IO[Unit] = {
     IO(scribe.debug(s"Deleting Security Group ${sg.groupName}")) *>
       completableFutureToIO(EC2.client.deleteSecurityGroup(DeleteSecurityGroupRequest.builder.groupId(sg.groupId).build())).void
   }
 
   /** This will detach the given security groups from all EC2 Instances/Network Interfaces then delete the group(s) */
-  def expungeSecurtyGroups(vpc: Vpc, sgs: List[SecurityGroup])(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def expungeSecurtyGroups(vpc: Vpc, sgs: List[SecurityGroup]): IO[Unit] = {
     for {
       ec2nodes <- EC2.findRunningInstanceInVpc(vpc)
       _        <- ec2nodes.traverse { ec2 => SecurityGroups.removeSecurityGroupsFromInstance(sgs, ec2) }
@@ -106,12 +108,11 @@ object SecurityGroups extends AwsErrorUtils with AWSUtils {
     } yield ()
   }
 
-  /**
-    *  Note: This will add rules but not remove existing ones not in the ipPermissions list.
+  /**  Note: This will add rules but not remove existing ones not in the ipPermissions list.
     *  TODO: Make sure this is master to add inbound, and check if a call needs to be made or rules already mach
     *  But should we refresh SG or assume its current?
     */
-  def addInboundRules(sg: SecurityGroup, ipPermissions: List[IpPermission])(implicit cs: ContextShift[IO]): IO[SecurityGroup] = {
+  def addInboundRules(sg: SecurityGroup, ipPermissions: List[IpPermission]): IO[SecurityGroup] = {
     completableFutureToIO(
       EC2.client.authorizeSecurityGroupIngress(
         AuthorizeSecurityGroupIngressRequest.builder.groupId(sg.groupId).ipPermissions(ipPermissions.asJavaCollection).build()
@@ -120,7 +121,7 @@ object SecurityGroups extends AwsErrorUtils with AWSUtils {
   }
 
   /** Adds inbound rule for depending on source of another SecurityGroup with all ports */
-  def addInboundRules(sg: SecurityGroup, srcSG: SecurityGroup)(implicit cs: ContextShift[IO]): IO[SecurityGroup] = {
+  def addInboundRules(sg: SecurityGroup, srcSG: SecurityGroup): IO[SecurityGroup] = {
     addInboundRules(sg, List(createSecurityGroupIPPermission(srcSG, -1, Some(-1), "-1")))
   }
 
@@ -143,7 +144,7 @@ object SecurityGroups extends AwsErrorUtils with AWSUtils {
   /** On success returned the passed in Security Group (not updated)
     * TODO: If already exists redeem error
     */
-  def addOutboundRules(sg: SecurityGroup, ipPermissions: List[IpPermission])(implicit cs: ContextShift[IO]): IO[SecurityGroup] = {
+  def addOutboundRules(sg: SecurityGroup, ipPermissions: List[IpPermission]): IO[SecurityGroup] = {
     IO(scribe.debug(s"Adding Outbound Rules to ${sg}")) *>
       completableFutureToIO {
         EC2.client.authorizeSecurityGroupEgress(
@@ -153,7 +154,7 @@ object SecurityGroups extends AwsErrorUtils with AWSUtils {
   }
 
   /** Security Groups are bound to EC2 Instances (mostly by eksctl now), this unbinds WIP */
-  def removeSecurityGroupsFromInstance(sgNames: List[SecurityGroup], instance: Instance)(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def removeSecurityGroupsFromInstance(sgNames: List[SecurityGroup], instance: Instance): IO[Unit] = {
     // If the Instance has multiple (network) interfaces then we have to specify the interface id instead WTF.
     // I guess if its in the list of security groups then delete from *each* interface id.
     // There are ones assigned on partiulcar NICs but I think this has the union of them all
@@ -182,7 +183,7 @@ object SecurityGroups extends AwsErrorUtils with AWSUtils {
       nics = instance.networkInterfaces.asScala.toList
       _   <- nics match {
                case many if nics.length >= 2 => many.traverse(v => deleteFromNic(v)).void
-               case _    =>
+               case _                        =>
                  IO.fromOption(NonEmptyList.fromList(toKeep))(OError("Can't Delete Instance SG to Zero"))
                    .flatMap(nel => setSecurityGroupsForInstance(nel, instance))
              }
@@ -193,7 +194,7 @@ object SecurityGroups extends AwsErrorUtils with AWSUtils {
   }
 
   /** Sets the EC2 Instances list of security group to the grops gived (by id). I think won't work if multiple network interfaces */
-  def setSecurityGroupsForInstance(sgIds: NonEmptyList[String], instance: Instance)(implicit cs: ContextShift[IO]): IO[Unit] =
+  def setSecurityGroupsForInstance(sgIds: NonEmptyList[String], instance: Instance): IO[Unit] =
     completableFutureToIO {
       EC2.client.modifyInstanceAttribute(
         ModifyInstanceAttributeRequest.builder
@@ -206,9 +207,7 @@ object SecurityGroups extends AwsErrorUtils with AWSUtils {
   /** We add to all the "interfaces"/"network interfaces"/"ENI" (same things)
     * Should really check to see if more than one ENI, if just one use set instance else set NIC
     */
-  def addSecurityGroupsToInstances(vpc: Vpc, sgs: NonEmptyList[SecurityGroup], instancesTagged: OTag)(
-      implicit cs: ContextShift[IO]
-  ): IO[Unit] = {
+  def addSecurityGroupsToInstances(vpc: Vpc, sgs: NonEmptyList[SecurityGroup], instancesTagged: OTag): IO[Unit] = {
     val sgIds = sgs.map(_.groupId) // Now way to get GroupIdentifier schmuxks
     for {
       instances <- EC2.findRunningInstanceInVpc(vpc, EC2.tagFilter(instancesTagged))
@@ -223,7 +222,7 @@ object SecurityGroups extends AwsErrorUtils with AWSUtils {
   }
 
   /** Removes security groups by positively setting thee securityGroups to keep. */
-  private def setSecurityGroupsForNic(sgIds: NonEmptyList[String], nicId: String)(implicit cs: ContextShift[IO]): IO[Unit] = {
+  private def setSecurityGroupsForNic(sgIds: NonEmptyList[String], nicId: String): IO[Unit] = {
     completableFutureToIO {
       EC2.client.modifyNetworkInterfaceAttribute(
         ModifyNetworkInterfaceAttributeRequest.builder

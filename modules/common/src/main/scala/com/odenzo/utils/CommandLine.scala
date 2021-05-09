@@ -1,7 +1,6 @@
 package com.odenzo.utils
 
 import cats._
-import cats.data._
 import cats.effect.IO
 import cats.syntax.all._
 import com.odenzo.utils.OPrint.oprint
@@ -129,8 +128,7 @@ object CommandLine {
       private def printStdErr(s: String): Unit = if (realtimeToo) scribe.warn(s"STDERR: $s")
     }
 
-    /**
-      * Executes a command line process, this is re-runnable.
+    /** Executes a command line process, this is re-runnable.
       *
       * @param cmd
       *

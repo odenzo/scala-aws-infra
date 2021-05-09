@@ -1,8 +1,6 @@
 package com.odenzo.aws.rds
 
-import cats._
-import cats.data._
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
 import cats.syntax.all._
 import com.odenzo.aws.{AWSUtils, OTags}
 import com.odenzo.utils.{FS2Utils, IOU, OError}
@@ -25,15 +23,13 @@ object RDS extends AWSUtils {
   /** Create a DB Subnet Group with  at least two  subnets in different zones, names and tags
     * What if I don't want different zones -- I have to specify a subgroup
     */
-  def createDbSubnetGroupIfMissing(subnetIds: List[String], name: String, desc: String, tags: OTags)(
-      implicit cs: ContextShift[IO]
-  ): IO[DBSubnetGroup] = {
+  def createDbSubnetGroupIfMissing(subnetIds: List[String], name: String, desc: String, tags: OTags): IO[DBSubnetGroup] = {
     val subnetGroupName = name.replace('/', '-')
     findDbSubnetGroup(subnetGroupName).flatMap {
       case Some(sg) =>
         IO(scribe.info(s"Subnet Group $subnetGroupName already exists, not re-creating but probably should")).as(sg)
 
-      case None     =>
+      case None =>
         IOU
           .toIO {
             client.createDBSubnetGroup(
@@ -50,7 +46,7 @@ object RDS extends AWSUtils {
   }
 
   /** No matching group fails :-( */
-  def findDbSubnetGroup(name: String)(implicit cs: ContextShift[IO]): IO[scala.Option[DBSubnetGroup]] = {
+  def findDbSubnetGroup(name: String): IO[scala.Option[DBSubnetGroup]] = {
     for {
       stream  <- listDbSubnetGroups()
       filtered = stream.filter(_.dbSubnetGroupName().equals(name))
@@ -58,7 +54,7 @@ object RDS extends AWSUtils {
     } yield oneOpt
   }
 
-  def listDbSubnetGroups()(implicit cs: ContextShift[IO]): IO[Stream[IO, DBSubnetGroup]] = {
+  def listDbSubnetGroups(): IO[Stream[IO, DBSubnetGroup]] = {
     for {
       stream  <- FS2Utils.toStream(client.describeDBSubnetGroupsPaginator())
       contents = stream.map(_.dbSubnetGroups().asScala.toList) >>= Stream.emits
@@ -66,21 +62,21 @@ object RDS extends AWSUtils {
   }
 
   /** Deletes the DbSubnetGroup iff it exists. Throws error if it doesn */
-  def deleteDbSubnetGroup(name: String)(implicit cs: ContextShift[IO]): IO[String] = {
+  def deleteDbSubnetGroup(name: String): IO[String] = {
     IOU
       .toIO(client.deleteDBSubnetGroup(DeleteDbSubnetGroupRequest.builder.dbSubnetGroupName(name).build))
       .as("Deleted")
   }
 
   /** On Pending success returns the original dbsg (no status updated) */
-  def deleteDbSubnetGroup(dbsg: DBSubnetGroup)(implicit cs: ContextShift[IO]): IO[DBSubnetGroup] = {
+  def deleteDbSubnetGroup(dbsg: DBSubnetGroup): IO[DBSubnetGroup] = {
     IOU
       .toIO(client.deleteDBSubnetGroup(DeleteDbSubnetGroupRequest.builder.dbSubnetGroupName(dbsg.dbSubnetGroupName).build))
       .as(dbsg)
   }
 
   /** This copies over EC2 security group inbound rules */
-  def addInboundSecurityGroupRules(sg: DBSecurityGroup, ec2securityGroupId: String)(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def addInboundSecurityGroupRules(sg: DBSecurityGroup, ec2securityGroupId: String): IO[Unit] = {
     IOU.toIO {
       client.authorizeDBSecurityGroupIngress(
         AuthorizeDbSecurityGroupIngressRequest.builder
@@ -92,7 +88,7 @@ object RDS extends AWSUtils {
     }.void
   }
 
-  def describeClusters()(implicit cs: ContextShift[IO]): IO[Stream[IO, DBCluster]] = {
+  def describeClusters(): IO[Stream[IO, DBCluster]] = {
     val request = rds.model.DescribeDbClustersRequest.builder().build()
     for {
       stream <- FS2Utils.toStream(client.describeDBClustersPaginator(request))
@@ -101,23 +97,23 @@ object RDS extends AWSUtils {
     } yield burst
   }
 
-  def getCluster(dbClusterName: String)(implicit cs: ContextShift[IO]): IO[DBCluster] = {
+  def getCluster(dbClusterName: String): IO[DBCluster] = {
     findCluster(dbClusterName) >>= IOU.required(s"DB Cluster $dbClusterName")
   }
 
   /** Non Paginating with max 100 returns.https://docs.aws.amazon.com/AmazonRDS/latest/APIReference/API_DescribeDBClusters.html */
-  def findClusters(filters: Filter*)(implicit cs: ContextShift[IO]): IO[List[DBCluster]] = {
+  def findClusters(filters: Filter*): IO[List[DBCluster]] = {
     IOU
       .toIO(client.describeDBClusters(DescribeDbClustersRequest.builder.filters(filters.asJavaCollection).maxRecords(100).build()))
       .map(v => fromJList(v.dbClusters()))
   }
 
-  def findCluster(dbClusterName: String)(implicit cs: ContextShift[IO]): IO[scala.Option[DBCluster]] = {
+  def findCluster(dbClusterName: String): IO[scala.Option[DBCluster]] = {
     // cluster-id is actually the only filter
     findClusters(Filter.builder.name("db-cluster-id").values(dbClusterName).build()) >>= IOU.optionOne(s"DB Cluster Id $dbClusterName")
   }
 
-  def findInstance(instanceName: String)(implicit cs: ContextShift[IO]): IO[scala.Option[DBInstance]] = {
+  def findInstance(instanceName: String): IO[scala.Option[DBInstance]] = {
     for {
       stream <- describeInstances()
       db     <- stream.filter(_.dbInstanceIdentifier.equals(instanceName)).compile.last
@@ -125,17 +121,17 @@ object RDS extends AWSUtils {
   }
 
   /** Also used to update the instance state */
-  def describeInstance(db: DBInstance)(implicit cs: ContextShift[IO]): IO[DBInstance] = {
+  def describeInstance(db: DBInstance): IO[DBInstance] = {
     findInstance(db.dbInstanceIdentifier) >>= IOU.required(s"DB Instance Not Found ${db.dbInstanceIdentifier}")
   }
 
   /** Status of DB Instance or None if not found (i.e. Deleted) */
-  def findInstanceStatus(db: DBInstance)(implicit cs: ContextShift[IO]): IO[scala.Option[String]] = {
+  def findInstanceStatus(db: DBInstance): IO[scala.Option[String]] = {
     findInstance(db.dbInstanceIdentifier()).map(opt => opt.map(_.dbInstanceStatus()))
   }
 
   /** Streams all the DB instances, not sure what happens if none, should be empty list I presume */
-  def describeInstances()(implicit cs: ContextShift[IO]): IO[Stream[IO, DBInstance]] = {
+  def describeInstances(): IO[Stream[IO, DBInstance]] = {
     for {
       stream <- FS2Utils.toStream(client.describeDBInstancesPaginator())
       content = stream.map(_.dbInstances.asScala.toList) >>= Stream.emits
@@ -146,7 +142,7 @@ object RDS extends AWSUtils {
   /** Deletes an instance and its backup with no final snapshot.
     * This may take a while to delete
     */
-  def deleteInstance(db: DBInstance)(implicit cs: ContextShift[IO]): IO[DBInstance] = {
+  def deleteInstance(db: DBInstance): IO[DBInstance] = {
     IO(scribe.info(s"Deleting Postgres Instance $db")) *>
       IOU
         .toIO(
@@ -162,7 +158,7 @@ object RDS extends AWSUtils {
   }
 
   /** Assumes deleting is constant, may go into backup though? */
-  def waitUntilDbInstanceDeleted(db: DBInstance)(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def waitUntilDbInstanceDeleted(db: DBInstance): IO[Unit] = {
     def stillDeleting(s: scala.Option[String]): Boolean =
       s match {
         case Some("deleting") => true
@@ -173,14 +169,14 @@ object RDS extends AWSUtils {
   }
 
   /** Assumes deleting is constant, may go into backup though? */
-  def waitUntilDbClusterDeleted(db: DBCluster)(implicit cs: ContextShift[IO]): IO[Unit] = {
+  def waitUntilDbClusterDeleted(db: DBCluster): IO[Unit] = {
     def loopWhile(s: String) = s.equals("deleting")
 
     AWSUtils.waitWhile(loopWhile)(findCluster(db.dbClusterIdentifier()).map(_.map(_.status())))
   }
 
   /** This is used as a "waitor" to see if an issued create/delete/modify has completed (error or not) */
-  def checkInstanceReady(dbToCheck: DBInstance)(implicit cs: ContextShift[IO]): IO[DBInstance] = {
+  def checkInstanceReady(dbToCheck: DBInstance): IO[DBInstance] = {
     // Non-Enumerated Status so setting here as a Doc https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.DBInstance.Status.html
     val inProgress =
       Set("starting", "stopping", "upgrading", "modifying", "renaming", "backing-up", "upgrading", "rebooting", "creating", "deleting")
@@ -191,7 +187,7 @@ object RDS extends AWSUtils {
   }
 
   /** This is used as a "waitor" to see if an issued create/delete/modify has completed (error or not) */
-  def checkClusterReady(db: DBCluster)(implicit cs: ContextShift[IO]): IO[DBCluster] = {
+  def checkClusterReady(db: DBCluster): IO[DBCluster] = {
     // Non-Enumerated Status so setting here as a Doc https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.DBInstance.Status.html
     val inProgress                = Set("starting", "stopping", "upgrading", "modifying", "renaming", "upgrading", "rebooting", "creating", "deleting")
     def keepPolling(v: DBCluster) = inProgress.contains(v.status().toLowerCase)

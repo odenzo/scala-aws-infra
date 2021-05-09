@@ -1,7 +1,12 @@
 package com.odenzo.aws.route53
 
+import cats.effect._
+import cats.effect.syntax.all._
+
 import cats._
 import cats.data._
+import cats.syntax.all._
+
 import cats.effect.IO
 import cats.syntax.all._
 import com.odenzo.aws.acm.ACM
@@ -31,7 +36,7 @@ class Route53Test extends AWSBaseTest {
       allZones <- Route53.listHostedZones().flatMap(_.compile.toList)
       zone     <- IO.fromOption(allZones.find(_.name == "horn.co."))(OError(".horn.co. zone not found"))
       str      <- Route53.listRecordSets(zone.id())
-      l        <- str.filter(_.`type`() === RRType.CNAME).filter(_.name().startsWith("_")).compile.toList
+      l        <- str.filter(_.`type`() == RRType.CNAME).filter(_.name().startsWith("_")).compile.toList
       _        <- l.traverse(i => IO(scribe.debug(s"CNAME RecSet: ${oprint(i)}")))
     } yield l
     val res  = prog.unsafeRunSync()

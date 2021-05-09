@@ -1,15 +1,12 @@
 package com.odenzo.sops
 
-import cats._
-import cats.data._
 import cats.effect._
-import cats.effect.syntax.all._
-import cats.syntax.all._
 import com.odenzo.utils.FileIO
 import io.circe.syntax.EncoderOps
 import io.circe.{Json, JsonObject}
+import os.CommandResult
 
-import java.io.File
+import java.io.{File, FileOutputStream}
 import java.nio.charset.Charset
 import scala.io.Codec
 
@@ -19,18 +16,21 @@ import scala.io.Codec
 object SOPS {
 
   /** Encrypts the JSON and writes to file, possible raising an error with IO context */
-  def encrypt(json: Json, toFile: File): IO[Unit] =
-    IO.delay {
-      val data: Array[Byte] = json.spaces4.getBytes(Charset.forName("UTF-8"))
-      os
-        .proc(Seq("/usr/local/bin/sops", "--input-type", "json", "--output-type", "json", "-e", "/dev/stdin"))
-        .call(stdin = data, check = true)
+  def encrypt(json: Json, toFile: File): IO[Unit] = {
+    val encrypt: IO[CommandResult] = IO
+      .delay {
+        val data: Array[Byte] = json.spaces4.getBytes(Charset.forName("UTF-8"))
+        os
+          .proc(Seq("/usr/local/bin/sops", "--input-type", "json", "--output-type", "json", "-e", "/dev/stdin"))
+          .call(stdin = data, check = true)
+      }
 
-    }.flatMap { res =>
-      FileIO.outputStream(toFile).use { out =>
-        IO(out.write(res.out.bytes))
+    encrypt.flatMap { res =>
+      FileIO.outputStream(toFile).use { out: FileOutputStream =>
+        IO.delay(out.write(res.out.bytes))
       }
     }
+  }
 
   def decryptJson(fromFile: File): IO[Json] = {
     IO.delay {
