@@ -5,6 +5,8 @@ import cats.effect.SyncIO
   * Used alot in K8S, and have regular expression that must match.
   * This has utilities to help and also to wrap.
   * Default constructor DOES NOT validate or mutate/normalize.
+  * This iwas started to deal with verification of kubernetes vs dns vs tag names etc ficking etc on aws
+  * Lost in the shuffle mostly.
   */
 case class DnsName(names: String)
 

@@ -7,7 +7,7 @@ import io.circe.generic.extras.semiauto.deriveConfiguredCodec
 
 import scala.util.Random
 
-/** Note: User oprint instead of pprint to continue masking.  */
+/** Note: User oprint instead of pprint to continue masking (or Show or toString) */
 case class Secret(secret: String) {
 
   override def toString = s"${secret.take(2)}...${secret.takeRight(2)}"
@@ -16,14 +16,11 @@ case class Secret(secret: String) {
 /** Impure (random number generator) based Secret generators */
 object Secret {
 
-
   def generatePassword(len: Int = 15): String = Random.alphanumeric.take(len).toList.mkString
-
   def generate: Secret                        = Secret(generatePassword())
   def generate(len: Int = 15): Secret         = Secret(generatePassword(len))
 
   import io.circe.generic.extras._
-
   implicit val codec: Codec[Secret] = semiauto.deriveUnwrappedCodec[Secret]
   implicit val show: Show[Secret]   = Show.fromToString[Secret]
 }

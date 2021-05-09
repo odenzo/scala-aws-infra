@@ -4,8 +4,9 @@ import cats.data.NonEmptyList
 import cats.effect.IO
 import cats.syntax.all._
 import com.odenzo.aws.{CIDR, OTags}
-import com.odenzo.utils.CommandLine
-import com.odenzo.utils.CommandLine.{Args, BinaryArg, Command, Executor}
+import com.odenzo.utils.CommandLineArgs.{Args, BinaryArg}
+import com.odenzo.utils.CommandLineExecutor
+import os.{CommandResult, Shellable, proc}
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.ec2.model.Subnet
 
@@ -109,7 +110,7 @@ object EksctlCommand {
       zones: List[String],
       cidr: CIDR,
       sshPubKey: Option[String]
-  ): Command = {
+  ): IO[CommandResult] = {
 
     val args = createCluster
       .add(baseArgs(clusterName, region))
@@ -118,7 +119,8 @@ object EksctlCommand {
       .add(withTags(tags))
       .add(sshPubKey.map(withSshAccessWithKeyPair))
       .add(withVerbosity(5))
-    Command("eksctl", args)
+    executeComand(args.toShellable(List("eksctl")))
+
   }
 
   /** Trying to build in excisting VPC by supplying the subnets,by ID. subnets reference the VPC */
@@ -129,7 +131,7 @@ object EksctlCommand {
       tags: OTags,
       region: Region,
       sshPubKey: Option[File]
-  ): Command = {
+  ): IO[CommandResult] = {
     val args = createCluster
       .add(baseArgs(clusterName, region))
       .add(withNodegroupSmall())
@@ -137,19 +139,16 @@ object EksctlCommand {
       .add(withTags(tags))
       .add(sshPubKey.map(withSshAccess))
 
-    Command("eksctl", args)
-  }
-  def executeComand(cmdLine: Command): IO[CommandLine.CmdLineResult] = {
+    executeComand(args.toShellable(List("eksctl")))
 
-    Executor.run(cmdLine)
   }
+  def executeComand(cmdLine: Shellable): IO[CommandResult] =
+    IO.delay(CommandLineExecutor.execute(cmdLine))
 
-  def executeFile(yaml: File): Command = {
-    Command(s"eksctl create cluster -f ${yaml.getAbsolutePath}")
-  }
+  def executeFile(yaml: File): IO[CommandResult] =
+    executeComand(Shellable(List("eksctl", "create", "cluster", "-f", yaml.getAbsolutePath)))
 
-  def updateKubeConfig(cluster: String): IO[CommandLine.CmdLineResult] = {
-    val cmd = Command(s"eksctl", Args.empty.add("utils").add("write-kubeconfig").add(cluster))
-    Executor.run(cmd)
-  }
+  def updateKubeConfig(cluster: String): IO[CommandResult] =
+    executeComand(Shellable(List("eksctl", "utils", "write-kubeconfig", cluster)))
+
 }

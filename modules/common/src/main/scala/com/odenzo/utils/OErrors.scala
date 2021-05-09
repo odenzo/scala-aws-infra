@@ -11,20 +11,21 @@ object OErrors {
     }
   }
 
-  /** Formats multline indented for easy and inneficiant error com.odenzo.utils.logging  */
+  /** Formats multline indented for easy and inneficiant error com.odenzo.utils.logging */
   def deep(t: Throwable): String = {
     deepMessages(t).mkString("\n\t", "\n\t", "\n")
   }
 
   def wrappingError(s: String, t: Throwable) = new Throwable(s, t)
 
-  /** New Application or Library Throwables should extend this. Not sealed or anything
-    * Can put sealed below (?) */
-  trait AppError extends Throwable
-
-  final case class NotFound(message: String) extends AppError
-
 }
+
+/** New Application or Library Throwables should extend this. Not sealed or anything
+  * Can put sealed below (?)
+  */
+trait AppError extends Throwable
+
+final case class NotFound(message: String) extends AppError
 
 object OError {
 

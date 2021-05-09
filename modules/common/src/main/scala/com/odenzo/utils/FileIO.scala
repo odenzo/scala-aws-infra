@@ -5,6 +5,7 @@ import cats.effect._
 import java.io.{File, FileInputStream, FileOutputStream}
 import scala.io.{Codec, Source}
 
+/** This would seem like something good to make F[_]:Async */
 object FileIO {
 
   def readUtfTextFile(f: File): SyncIO[String] = {

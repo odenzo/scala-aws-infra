@@ -9,34 +9,32 @@ import java.util.concurrent.{CompletableFuture, TimeUnit}
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 
-/** Some utilities, these are for conrete IO type mostly, a few ApplicativeErrors */
+/** Some utilities, these are for concrete IO type mostly, a few ApplicativeErrors */
 trait IOU {
 
-  def toIO[A](fn: => CompletableFuture[A]): IO[A] = {
-    import scala.jdk.FutureConverters._
-    val ff: IO[Future[A]] = IO.delay(fn.asScala)
-    IO.fromFuture(ff) // Does IO.async under the hood.
-  }
+  def toIO[A](fn: => CompletableFuture[A]): IO[A] = IO.fromCompletableFuture(IO.delay(fn))
 
   /** Allows  toIO(Future.successful("a") or toIO(callReturningFuture(args))
     * such that the future is deflation because fn is call-by-name
     */
-  def fromFuture[A](fn: => Future[A]): IO[A] = {
-    IO.fromFuture(IO(fn))
-  }
+  def fromFuture[A](fn: => Future[A]): IO[A] = IO.fromFuture(IO(fn))
 
   /** Ensures list has exactly one element or raisesError */
   def exactlyOne[A](msg: String)(l: List[A]): IO[A] = {
-    val err = OError(s"Requires List Size 1 but  ${l.length}: $msg")
-    if (l.length > 1) IO.raiseError[A](err)
-    else IO.fromOption(l.headOption)(err)
+    l match {
+      case h :: Nil => IO.pure(h)
+      case _        => IO.raiseError[A](OError(s"Requires List Size 1 but  ${l.length}: $msg"))
+    }
+
   }
 
   /** Ensures 0 or 1 elements in a list, errors if > 1 */
   def optionOne[A](msg: String)(l: List[A]): IO[Option[A]] = {
-    val err = OError(s"Expected List Size 0 or 1 but  ${l.length}: $msg")
-    if (l.length > 1) IO.raiseError[Option[A]](err)
-    else IO.pure(l.headOption)
+    l match {
+      case Nil      => IO.pure(Option.empty[A])
+      case h :: Nil => IO.pure(h.some)
+      case _        => IO.raiseError(OError(s"Requires List Size 0 or 1 but  ${l.length}: $msg"))
+    }
   }
 
   /** Raises an Option.empty to Error */

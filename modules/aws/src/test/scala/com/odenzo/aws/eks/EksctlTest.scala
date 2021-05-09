@@ -5,13 +5,14 @@ import com.odenzo.aws.CIDR
 import com.odenzo.aws.ec2.{EC2, VPC}
 import com.odenzo.aws.eks.eksctl.EksctlCommand
 import com.odenzo.aws.testutils.AWSBaseTest
-import com.odenzo.utils.CommandLine
+import com.odenzo.utils.CommandLineArgs
 import com.odenzo.utils.OPrint.oprint
+import os.CommandResult
 
 class EksctlTest extends AWSBaseTest {
 
   test("Generating eksctl command") {
-    val cmd: CommandLine.Command =
+    val cmd: IO[CommandResult] =
       EksctlCommand.buildCommand(
         "dev-playground",
         globalTags,
@@ -21,13 +22,10 @@ class EksctlTest extends AWSBaseTest {
         None
       )
 
-    scribe.info(s"Command: ${cmd}")
-
-    scribe.info(s"ZSH: \n ${cmd.toZsh}")
   }
 
   test("Running eksctl for real") {
-    val cmd: CommandLine.Command =
+    val cmd: IO[CommandResult] =
       EksctlCommand.buildCommand(
         "dev-playground",
         globalTags,
@@ -39,13 +37,11 @@ class EksctlTest extends AWSBaseTest {
 
     scribe.debug(s"Command: ${oprint(cmd)}")
 
-    EksctlCommand.executeComand(cmd).attempt.unsafeRunSync() match {
+    cmd.attempt.unsafeRunSync() match {
       case Left(err) => scribe.error(s"Trouble Running\n", err); fail("Failed ksctl cmd", err)
       case Right(rs) =>
-        scribe.info(s"Std Error: ${rs.stderr}")
-        scribe.info(s"Std Out: ${rs.stdout}")
-      // The bitch abount this is needs manually inspection, but we know clustername so we can API search anyway
-
+        scribe.info(s"Std Error: ${rs.out.toString}")
+        scribe.info(s"Std Out: ${rs.err.toString}")
     }
   }
 

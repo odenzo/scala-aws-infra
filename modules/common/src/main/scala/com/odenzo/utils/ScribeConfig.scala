@@ -3,6 +3,7 @@ package com.odenzo.utils
 import scribe.filter._
 import scribe.{Level, Logger, Priority}
 
+/** Make scribe use logback.xml is possible via slf4j? */
 trait ScribeHelpers {
 
   def applyFilter(fb: FilterBuilder): Logger = {

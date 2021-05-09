@@ -3,6 +3,7 @@ package com.odenzo.utils
 import cats.syntax.all._
 import pprint.{PPrinter, Tree}
 
+/** An extension of pprint with extra masking and my configs */
 object OPrint {
 
   /** Customized version of pprint with config */
